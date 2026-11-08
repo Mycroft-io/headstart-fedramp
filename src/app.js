@@ -147,14 +147,14 @@ function renderSoa() {
     </tbody></table></div>`;
 }
 const EXPORTS = [
-  { id: 'xlsx', name: 'Readiness workbook', ext: 'xlsx', what: 'Summary, a prioritised work plan, every indicator with its Annex A evidence and the 20x additions, and the FedRAMP rules for your class.' },
+  { id: 'xlsx', name: 'Readiness workbook', ext: 'xlsx', what: 'Summary, a prioritized work plan, every indicator with its Annex A evidence and the 20x additions, and the FedRAMP rules for your class.' },
   { id: 'workplan', name: 'Work plan', ext: 'csv', what: 'Gaps and partials first, then re-evidencing of head starts, then the FedRAMP rule sets.' },
   { id: 'ksi', name: 'Indicator readiness', ext: 'csv', what: 'One row per indicator.' },
   { id: 'rules', name: 'FedRAMP rules', ext: 'csv', what: 'The rules that apply to your class, with statements.' },
 ];
 function renderExport() {
   const m = state.model; const top = C.workplanRows(m).slice(1).filter(r => r[0] === 1).slice(0, 8);
-  $('view').innerHTML = `<p class="lede">Start with the indicators where ISO gives you nothing to build on${top.length ? `: ${top.map(r => `<strong>${esc(r[1].split(' ')[0])}</strong>`).join(', ')}` : ''}. Then extend the partials, then plan the FedRAMP rule sets as new programme work. ${esc(C.NOTICE)}</p>
+  $('view').innerHTML = `<p class="lede">Start with the indicators where ISO gives you nothing to build on${top.length ? `: ${top.map(r => `<strong>${esc(r[1].split(' ')[0])}</strong>`).join(', ')}` : ''}. Then extend the partials, then plan the FedRAMP rule sets as new program work. ${esc(C.NOTICE)}</p>
     ${sampleFn ? `<div class="ai memo-card" style="margin-bottom:14px"><div class="ai-head"><span class="spark" aria-hidden="true">✦</span><strong>Draft a readiness summary with Claude</strong></div><p class="dim">A one-page note for your leadership from the reading above: where you stand for ${esc(C.CLASSES[m.cls])}, the first gaps to close, and what the FedRAMP rules add. Written from the computed result, on your own Claude account, after you allow it. Check it before you send it.</p>
       <div class="row" style="justify-content:flex-start;align-items:center"><button type="button" class="btn cta" id="memo-run">Draft summary</button><button type="button" class="btn" id="memo-stop" hidden>Stop</button><button type="button" class="btn" id="memo-copy" hidden>Copy</button><span id="memo-status" class="dim" role="status" aria-live="polite"></span></div>
       <div id="memo" class="memo" hidden></div></div>` : ''}
@@ -212,7 +212,7 @@ REPORT TEXT:
     const tested = Array.isArray(x.criteriaTested) ? x.criteriaTested.filter(c => C.normTsc(c, tsc)).length : 0;
     status.textContent = `Done. ${exc.length} exception${exc.length === 1 ? '' : 's'} found${tested ? `, ${tested} criteria seen` : ''}. Check the form, then read the report.`;
     found.hidden = false;
-    found.innerHTML = `<p class="dim" style="font-size:13px">${x.serviceOrganization ? `Service organisation: <strong>${esc(x.serviceOrganization)}</strong>. ` : ''}What Claude found, written into the form above:</p>` + (exc.length ? `<ul class="found">${exc.map(e => `<li><span class="mono">${esc(String(e.criterion).toUpperCase())}</span><span>${esc(String(e.text || '').slice(0, 300))}</span><span class="tag t-bad">exception</span></li>`).join('')}</ul>` : '<p class="dim" style="font-size:13px">No exceptions found in the text.</p>');
+    found.innerHTML = `<p class="dim" style="font-size:13px">${x.serviceOrganization ? `Service organization: <strong>${esc(x.serviceOrganization)}</strong>. ` : ''}What Claude found, written into the form above:</p>` + (exc.length ? `<ul class="found">${exc.map(e => `<li><span class="mono">${esc(String(e.criterion).toUpperCase())}</span><span>${esc(String(e.text || '').slice(0, 300))}</span><span class="tag t-bad">exception</span></li>`).join('')}</ul>` : '<p class="dim" style="font-size:13px">No exceptions found in the text.</p>');
   } catch (e) {
     status.textContent = e?.code === 'cancelled' ? 'Stopped.' : aiCopy(e);
     if (['not_granted', 'sampling_disabled', 'not_declared', 'capability_disabled', 'capability_removed'].includes(e?.code)) $('ai-extract').hidden = true;

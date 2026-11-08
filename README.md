@@ -1,6 +1,6 @@
 # Headstart 20x
 
-A single web page that reads an ISO/IEC 27001:2022 Statement of Applicability or a SOC 2 report and shows how far it gets you toward FedRAMP 20x Class B, C or D: where your programme gives you a head start, where it falls short, and what 20x adds on top.
+A single web page that reads an ISO/IEC 27001:2022 Statement of Applicability or a SOC 2 report and shows how far it gets you toward FedRAMP 20x Class B, C or D: where your program gives you a head start, where it falls short, and what 20x adds on top.
 
 It runs entirely in the browser. Nothing is uploaded, the page makes no network requests, and `dist/index.html` works when opened from disk. The copy published inside claude.ai adds two optional steps that ask Claude, on the viewer's own account and with their consent: reading a SOC 2 report's Section 4 into the form, and drafting a one-page readiness note from the result. The public site has neither and never contacts a model.
 
@@ -22,8 +22,8 @@ Sibling project: [Crosswalk 20x](https://github.com/Mycroft-io/crosswalk-rev5-to
    | Excluded in SoA / Exception noted | ISO: a strongly related control is marked not applicable. SOC 2: the report noted an exception against a strongly related criterion. |
 
    Every indicator also carries a note on what 20x asks for beyond ISO: automation, continuous evidence, FIPS-validated cryptography, FedRAMP reporting, and so on.
-3. **Lists the FedRAMP rules** that apply to a provider of the chosen class (157 for Class B and C, 156 for Class D in rules 2026.11.02.01). No ISO control evidences them; they are new programme work.
-4. **Exports** a readiness workbook with a prioritised work plan, plus CSVs.
+3. **Lists the FedRAMP rules** that apply to a provider of the chosen class (157 for Class B and C, 156 for Class D in rules 2026.11.02.01). No ISO control evidences them; they are new program work.
+4. **Exports** a readiness workbook with a prioritized work plan, plus CSVs.
 
 There is no percentage score on purpose. A control crosswalk cannot support one, and an assessor would not accept it.
 
@@ -58,6 +58,6 @@ npm test
 - The SOC 2 form reads exceptions by criterion. If a report lists exceptions by control number only, map them to criteria first (or let Claude do it in the claude.ai copy).
 - Tested on the fictional samples only. Real SoAs will find parser gaps; please file them with an anonymised row.
 
-## Licence
+## License
 
 Code: Apache-2.0, copyright 2026 Mycroft Technologies Inc. See `LICENSE` and `NOTICE`. FedRAMP data is CC0. Fonts are under the SIL Open Font License.

@@ -128,7 +128,7 @@ export function parseSoaRows(rows) {
   }
   if (legacy) notes.push(`${legacy} rows use 2013-style numbering (A.x.y.z) and were skipped.`);
   if (controls.size && controls.size < 60) notes.push(`Only ${controls.size} of 93 Annex A controls were found. Controls not listed are treated as not applicable.`);
-  if (controls.size && [...controls.values()].every(c => c.status === null)) notes.push('No implementation status column was recognised, so every applicable control is treated as implemented. Readiness will read higher than it is.');
+  if (controls.size && [...controls.values()].every(c => c.status === null)) notes.push('No implementation status column was recognized, so every applicable control is treated as implemented. Readiness will read higher than it is.');
   return { controls, notes };
 }
 
