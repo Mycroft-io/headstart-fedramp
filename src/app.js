@@ -1,5 +1,7 @@
 import { zipSync, strToU8, unzipSync, strFromU8 } from 'fflate';
 import * as C from './core.js';
+import { scanReport } from './scanner.js';
+import { pdfToPages } from './pdftext.js';
 
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -187,6 +189,33 @@ async function save(id, btn) {
     }
   } catch (e) { say(`Could not build that file: ${e.message}`, true); } finally { btn.disabled = false; }
 }
+// ---------- PDF scanner ----------
+let lastScan = null;
+async function scanPdf(f) {
+  if (!f) return;
+  showSource('soc2');
+  const status = $('scan-status'), found = $('scan-found');
+  found.hidden = true; status.textContent = 'Reading the PDF…';
+  let pages;
+  try { pages = await pdfToPages(new Uint8Array(await f.arrayBuffer()), (i, n) => { status.textContent = `Reading page ${i} of ${n}…`; }); }
+  catch (e) { status.textContent = `Could not read ${f.name} (${e?.message || 'unreadable PDF'}).`; return; }
+  const chars = pages.join('').replace(/\s/g, '').length;
+  if (chars < 200) { status.textContent = 'This PDF has no extractable text (probably a scanned image). Use the form below instead.'; return; }
+  const r = scanReport(pages); lastScan = r;
+  fillSoc2Form({ reportType: r.reportType, period: r.period, categories: r.categories, exceptions: r.exceptions.filter(e => e.criterion) });
+  status.textContent = `Scanned ${r.pages} pages. ${r.exceptions.length} exception${r.exceptions.length === 1 ? '' : 's'}, ${r.cleanCount} clean results, ${r.criteriaTested.length} criteria seen. The form is filled in; untick anything that is wrong, then read the report.`;
+  const conf = c => `<span class="conf conf-${c}">${c}</span>`;
+  found.hidden = false;
+  found.innerHTML = `<div class="found-meta">${r.serviceOrganization ? `<span>Organization <b>${esc(r.serviceOrganization)}</b></span>` : ''}<span>Type <b>${esc(r.reportType)}</b> ${conf(r.typeConf)}</span>${r.period ? `<span>Period <b>${esc(r.period)}</b></span>` : ''}<span>Scope <b>${r.categories.map(c => esc(tsc.categories[c] || c)).join(', ')}</b> ${conf(r.catConf)}</span></div>
+    ${r.notes.map(n => `<p class="warn" style="font-size:13px">${esc(n)}</p>`).join('')}
+    ${r.exceptions.length ? `<ul class="found">${r.exceptions.map((e, i) => `<li class="pick"><input type="checkbox" id="exc-${i}" data-exc="${i}" ${e.criterion ? 'checked' : ''} aria-label="Include this exception"><label for="exc-${i}" class="mono">${esc(e.criterion || '?')}</label><span><label for="exc-${i}">${esc(e.text)}</label>${e.control ? ` <span class="dim">(${esc(e.control)})</span>` : ''}${e.confidence !== 'high' ? `<div class="dim" style="font-size:12.5px">Context: ${esc(e.snippet.slice(0, 220))}</div>` : ''}</span>${conf(e.confidence)}</li>`).join('')}</ul>` : '<p class="dim" style="font-size:13px">No exceptions found.</p>'}`;
+}
+function syncExceptionsFromScan() {
+  if (!lastScan) return;
+  const keep = [...document.querySelectorAll('[data-exc]')].filter(i => i.checked).map(i => lastScan.exceptions[+i.dataset.exc]).filter(e => e.criterion);
+  $('exceptions').value = keep.map(e => `${e.criterion}: ${e.text}`).join('\n');
+}
+
 // ---------- Claude (claude.ai artifact only) ----------
 const AI_COPY = { not_granted: 'Claude is not allowed for this page, so this stays manual.', rate_limited: 'Claude is busy or you have hit a usage limit. Try again in a little while.', refused: 'Claude declined to read that text.', invalid_json: 'Claude did not return a readable result. Try pasting less text, such as only Section 4.', prompt_too_large: 'That is more text than one call can take. Paste Section 4 only.', upstream_error: 'The connection dropped. Try again.', session_expired: 'Sign in to Claude again, then retry.' };
 const aiCopy = e => AI_COPY[e?.code] || (['sampling_disabled', 'not_declared', 'capability_disabled', 'capability_removed'].includes(e?.code) ? AI_COPY.not_granted : AI_COPY.upstream_error);
@@ -275,7 +304,7 @@ function setTab(t, fromHash) {
 
 // ---------- events ----------
 document.addEventListener('click', e => {
-  const t = e.target.closest('[data-tab],[data-state],[data-export],#open,#clear,[data-open],[data-sample],[data-src],#use-paste,#ai-run,#ai-stop,#memo-run,#memo-stop,#memo-copy');
+  const t = e.target.closest('[data-tab],[data-state],[data-export],#open,#clear,[data-open],[data-sample],[data-src],#use-paste,#ai-run,#ai-stop,#memo-run,#memo-stop,#memo-copy,#pdf-open');
   if (!t) return;
   if (t.dataset.tab) setTab(t.dataset.tab);
   else if (t.dataset.state) { const s = t.dataset.state; state.states.has(s) ? state.states.delete(s) : state.states.add(s); renderCoverage(); if (state.tab !== 'indicators') setTab('indicators'); else renderIndicators(); }
@@ -291,6 +320,7 @@ document.addEventListener('click', e => {
   else if (t.id === 'memo-run') aiMemo();
   else if (t.id === 'memo-stop') memoCtl?.abort();
   else if (t.id === 'memo-copy') copyMemo(t);
+  else if (t.id === 'pdf-open') $('pdf').click();
 });
 document.addEventListener('toggle', e => {
   const d = e.target; if (!d.classList?.contains('ctl') || !d.open) return;
@@ -305,12 +335,14 @@ document.addEventListener('input', e => {
 document.addEventListener('change', e => {
   if (e.target.id === 'cls') { state.cls = e.target.value; store.set('cls', state.cls); refresh(); }
   else if (e.target.id === 'file') { loadFile(e.target.files[0]); e.target.value = ''; }
+  else if (e.target.id === 'pdf') { scanPdf(e.target.files[0]); e.target.value = ''; }
+  else if (e.target.matches('[data-exc]')) syncExceptionsFromScan();
 });
 let depth = 0;
 addEventListener('dragenter', e => { e.preventDefault(); if (depth++ === 0) document.body.classList.add('dragging'); });
 addEventListener('dragleave', () => { if (--depth <= 0) { depth = 0; document.body.classList.remove('dragging'); } });
 addEventListener('dragover', e => e.preventDefault());
-addEventListener('drop', e => { e.preventDefault(); depth = 0; document.body.classList.remove('dragging'); if (e.dataTransfer?.files?.length) loadFile(e.dataTransfer.files[0]); });
+addEventListener('drop', e => { e.preventDefault(); depth = 0; document.body.classList.remove('dragging'); const f = e.dataTransfer?.files?.[0]; if (!f) return; if (/\.pdf$/i.test(f.name) || f.type === 'application/pdf') scanPdf(f); else loadFile(f); });
 document.addEventListener('submit', e => { if (e.target.id === 'soc2-form') { e.preventDefault(); readSoc2Form(); } });
 addEventListener('hashchange', () => { if (location.hash === '#sample') loadSample('iso'); else if (location.hash === '#sample-soc2') loadSample('soc2'); else setTab(location.hash.slice(1), true); });
 

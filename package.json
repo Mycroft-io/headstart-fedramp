@@ -6,10 +6,12 @@
     "data": "python3 -I build/make_data.py ../crosswalk/data/reference.json data/fedramp.json",
     "sample": "node build/make_sample.mjs",
     "build": "node build/build.mjs",
-    "test": "esbuild test/run.mjs --bundle --platform=node --format=esm --outfile=.tmp/test.mjs --log-level=error --banner:js=\"import {createRequire as __cr} from 'module';const require=__cr(import.meta.url);\" && node .tmp/test.mjs"
+    "test": "esbuild test/run.mjs --bundle --platform=node --format=esm --outfile=.tmp/test.mjs --log-level=error --banner:js=\"import {createRequire as __cr} from 'module';const require=__cr(import.meta.url);\" && node .tmp/test.mjs && node test/scanner.mjs",
+    "fixtures": "python3 build/make_fixture_pdf.py"
   },
   "dependencies": {
-    "fflate": "^0.8.3"
+    "fflate": "^0.8.3",
+    "pdfjs-dist": "4.10.38"
   },
   "private": true,
   "type": "module",

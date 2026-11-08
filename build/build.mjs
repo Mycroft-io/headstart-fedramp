@@ -1,8 +1,15 @@
 // Builds dist/index.html (standalone), dist/artifact.html (body only) and dist/_headers.
 import fs from 'node:fs';
 import crypto from 'node:crypto';
-import { buildSync } from 'esbuild';
-const js = buildSync({ entryPoints: ['src/app.js'], bundle: true, format: 'iife', minify: true, write: false, target: 'es2020', legalComments: 'none' }).outputFiles[0].text;
+import { build } from 'esbuild';
+import { createRequire } from 'node:module';
+const require = createRequire(import.meta.url);
+// '?text' imports bring a file in as a string (used for the pdf.js worker, run from an inline blob).
+const textLoader = { name: 'text', setup(b) {
+  b.onResolve({ filter: /\?text$/ }, args => ({ path: require.resolve(args.path.replace(/\?text$/, ''), { paths: [args.resolveDir] }), namespace: 'text' }));
+  b.onLoad({ filter: /.*/, namespace: 'text' }, args => ({ contents: fs.readFileSync(args.path, 'utf8'), loader: 'text' }));
+} };
+const js = (await build({ entryPoints: ['src/app.js'], bundle: true, format: 'iife', minify: true, write: false, target: 'es2020', legalComments: 'none', plugins: [textLoader] })).outputFiles[0].text;
 const inline = o => JSON.stringify(o).replace(/</g, '\\u003c');
 const data = {
   fedramp: JSON.parse(fs.readFileSync('data/fedramp.json', 'utf8')), mapping: JSON.parse(fs.readFileSync('data/mapping.json', 'utf8')),

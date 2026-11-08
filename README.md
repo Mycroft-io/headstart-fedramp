@@ -10,7 +10,7 @@ Sibling project: [Crosswalk 20x](https://github.com/Mycroft-io/crosswalk-rev5-to
 
 ## What it does
 
-1. **Reads an ISO SoA** from Excel, CSV or pasted rows, **or a SOC 2 report** from a short form: report type, period, Trust Services categories in scope, and the exceptions from Section 4 (one per line, starting with the criterion). Criteria in a category outside the report's scope read as gaps; an exception against a strongly related criterion flags the indicator.
+1. **Reads an ISO SoA** from Excel, CSV or pasted rows, **or a SOC 2 report**. Drop the report PDF and a rules-based scanner (`src/scanner.js`) reads the text in the browser with pdf.js, finds the report type and period in the opinion, the categories in scope, and every test result phrase in Section 4, attributing each exception to the nearest criterion with a confidence mark for you to confirm. Or fill the short form by hand: report type, period, Trust Services categories in scope, and the exceptions from Section 4 (one per line, starting with the criterion). Criteria in a category outside the report's scope read as gaps; an exception against a strongly related criterion flags the indicator.
    The SoA parser It finds the Annex A control IDs (A.5.1 to A.8.34), whether each control is applicable, and its implementation status where the SoA tracks one. 2013-numbered SoAs are rejected with a note.
 2. **Reads it against the 46 Key Security Indicators** using `data/mapping.json`. Each indicator gets one state:
 
@@ -49,6 +49,12 @@ npm test
 ## Hosting
 
 `.github/workflows/pages.yml` publishes `dist/` to GitHub Pages on every push to `main`. `site/_headers` carries a Content-Security-Policy for Cloudflare Pages that pins the inline script by hash.
+
+## The scanner
+
+SOC 2 layouts differ by audit firm. The scanner relies on the things that are stable across them: the opinion's period wording, the "relevant to security, availability…" phrase, and the narrow vocabulary of test results ("no exceptions noted", "exception noted", "deviation noted", "not operating effectively"). Each exception is tied to the nearest criterion identifier in the text and marked high, medium or low confidence by distance; the reader confirms before anything is scored. Scanned-image PDFs have no text and fall back to the form. Test fixtures are two fictional reports in different layouts (`npm run fixtures`).
+
+A local model hook (`src/local-llm.js`) is in place for resolving low-confidence attributions on-device; no engine ships yet.
 
 ## Known limits
 

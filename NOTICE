@@ -9,3 +9,5 @@ ISO/IEC 27001:2022 Annex A control identifiers and short titles are used to iden
 controls. The standard is published by ISO and IEC and is not reproduced here.
 
 Fonts: TASA Orbiter and Inter under the SIL Open Font License 1.1 (assets/LICENSE-*.txt).
+
+PDF text extraction: pdf.js, Copyright Mozilla Foundation, Apache License 2.0.
