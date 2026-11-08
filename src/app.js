@@ -2,6 +2,7 @@ import { zipSync, strToU8, unzipSync, strFromU8 } from 'fflate';
 import * as C from './core.js';
 import { scanReport } from './scanner.js';
 import { pdfToPages } from './pdftext.js';
+import { createGemmaEngine, hasWebGPU, DOWNLOAD_NOTE } from './engines/gemma.js';
 
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -204,16 +205,54 @@ async function scanPdf(f) {
   const r = scanReport(pages); lastScan = r;
   fillSoc2Form({ reportType: r.reportType, period: r.period, categories: r.categories, exceptions: r.exceptions.filter(e => e.criterion) });
   status.textContent = `Scanned ${r.pages} pages. ${r.exceptions.length} exception${r.exceptions.length === 1 ? '' : 's'}, ${r.cleanCount} clean results, ${r.criteriaTested.length} criteria seen. The form is filled in; untick anything that is wrong, then read the report.`;
+  renderFound(r);
+  const uncertain = r.exceptions.filter(e => e.confidence !== 'high' && (e.candidates || []).length > 1);
+  $('gemma').hidden = !(uncertain.length && hasWebGPU());
+  if (uncertain.length && hasWebGPU()) { $('gemma-why').textContent = `${uncertain.length} exception${uncertain.length === 1 ? '' : 's'} could belong to more than one criterion. Gemma reads each snippet and picks among the nearby criteria; its picks are marked and you can still untick them.`; $('gemma-note').textContent = DOWNLOAD_NOTE; $('gemma-status').textContent = ''; }
+}
+function renderFound(r) {
+  const found = $('scan-found');
   const conf = c => `<span class="conf conf-${c}">${c}</span>`;
   found.hidden = false;
   found.innerHTML = `<div class="found-meta">${r.serviceOrganization ? `<span>Organization <b>${esc(r.serviceOrganization)}</b></span>` : ''}<span>Type <b>${esc(r.reportType)}</b> ${conf(r.typeConf)}</span>${r.period ? `<span>Period <b>${esc(r.period)}</b></span>` : ''}<span>Scope <b>${r.categories.map(c => esc(tsc.categories[c] || c)).join(', ')}</b> ${conf(r.catConf)}</span></div>
     ${r.notes.map(n => `<p class="warn" style="font-size:13px">${esc(n)}</p>`).join('')}
-    ${r.exceptions.length ? `<ul class="found">${r.exceptions.map((e, i) => `<li class="pick"><input type="checkbox" id="exc-${i}" data-exc="${i}" ${e.criterion ? 'checked' : ''} aria-label="Include this exception"><label for="exc-${i}" class="mono">${esc(e.criterion || '?')}</label><span><label for="exc-${i}">${esc(e.text)}</label>${e.control ? ` <span class="dim">(${esc(e.control)})</span>` : ''}${e.confidence !== 'high' ? `<div class="dim" style="font-size:12.5px">Context: ${esc(e.snippet.slice(0, 220))}</div>` : ''}</span>${conf(e.confidence)}</li>`).join('')}</ul>` : '<p class="dim" style="font-size:13px">No exceptions found.</p>'}`;
+    ${r.exceptions.length ? `<ul class="found">${r.exceptions.map((e, i) => `<li class="pick"><input type="checkbox" id="exc-${i}" data-exc="${i}" ${e.criterion ? 'checked' : ''} aria-label="Include this exception"><label for="exc-${i}" class="mono">${esc(e.criterion || '?')}</label><span><label for="exc-${i}">${esc(e.text)}</label>${e.control ? ` <span class="dim">(${esc(e.control)})</span>` : ''}${e.byGemma ? '<span class="gemma-tag">Gemma</span>' : ''}${e.confidence !== 'high' && !e.byGemma ? `<div class="dim" style="font-size:12.5px">Context: ${esc(e.snippet.slice(0, 220))}</div>` : ''}</span>${conf(e.confidence)}</li>`).join('')}</ul>` : '<p class="dim" style="font-size:13px">No exceptions found.</p>'}`;
 }
 function syncExceptionsFromScan() {
   if (!lastScan) return;
   const keep = [...document.querySelectorAll('[data-exc]')].filter(i => i.checked).map(i => lastScan.exceptions[+i.dataset.exc]).filter(e => e.criterion);
   $('exceptions').value = keep.map(e => `${e.criterion}: ${e.text}`).join('\n');
+}
+
+// ---------- Gemma on-device ----------
+let gemma = null, gemmaCtl = null;
+async function runGemma() {
+  if (!lastScan) return;
+  const status = $('gemma-status'), run = $('gemma-run'), stop = $('gemma-stop');
+  run.disabled = true; stop.hidden = false; gemmaCtl = new AbortController();
+  const fmt = p => p.kind === 'bytes' && p.total ? `${p.message} ${(p.loaded / 1048576).toFixed(0)} / ${(p.total / 1048576).toFixed(0)} MB` : p.fraction != null ? `${p.message} ${Math.round(p.fraction * 100)}%` : p.message || 'Loading';
+  try {
+    gemma ??= createGemmaEngine({ onProgress: p => { status.textContent = fmt(p); } });
+    status.textContent = 'Starting…';
+    const ok = await gemma.ready(gemmaCtl.signal);
+    if (!ok) { status.textContent = 'WebGPU is not available in this browser.'; return; }
+    const todo = lastScan.exceptions.filter(e => e.confidence !== 'high' && (e.candidates || []).length > 1);
+    let n = 0, changed = 0;
+    for (const e of todo) {
+      if (gemmaCtl.signal.aborted) break;
+      status.textContent = `Reading exception ${++n} of ${todo.length}…`;
+      const options = e.candidates.filter(c => tsc.criteria[c]).map(c => `${c} ${tsc.criteria[c]}`);
+      const q = `A SOC 2 auditor recorded this test result: "${e.snippet.slice(0, 500)}". Which Trust Services criterion does the tested control support?`;
+      let pick = null;
+      try { pick = await gemma.choose(q, options, { signal: gemmaCtl.signal }); } catch (err) { if (gemmaCtl.signal.aborted) break; throw err; }
+      const id = pick ? pick.split(' ')[0] : null;
+      if (id && tsc.criteria[id]) { if (id !== e.criterion) changed++; e.criterion = id; e.byGemma = true; e.confidence = 'medium'; }
+    }
+    renderFound(lastScan); syncExceptionsFromScan();
+    status.textContent = gemmaCtl.signal.aborted ? 'Stopped.' : `Done. Gemma reviewed ${todo.length} exception${todo.length === 1 ? '' : 's'} and changed ${changed}. Its picks are marked; check them.`;
+  } catch (err) {
+    status.textContent = /import|fetch|network|Failed to load/i.test(String(err?.message)) ? 'Could not download the runtime or model. Check the connection and try again.' : `Gemma could not run here (${err?.message || 'unknown error'}).`;
+  } finally { run.disabled = false; stop.hidden = true; gemmaCtl = null; }
 }
 
 // ---------- Claude (claude.ai artifact only) ----------
@@ -304,7 +343,7 @@ function setTab(t, fromHash) {
 
 // ---------- events ----------
 document.addEventListener('click', e => {
-  const t = e.target.closest('[data-tab],[data-state],[data-export],#open,#clear,[data-open],[data-sample],[data-src],#use-paste,#ai-run,#ai-stop,#memo-run,#memo-stop,#memo-copy,#pdf-open');
+  const t = e.target.closest('[data-tab],[data-state],[data-export],#open,#clear,[data-open],[data-sample],[data-src],#use-paste,#ai-run,#ai-stop,#memo-run,#memo-stop,#memo-copy,#pdf-open,#gemma-run,#gemma-stop');
   if (!t) return;
   if (t.dataset.tab) setTab(t.dataset.tab);
   else if (t.dataset.state) { const s = t.dataset.state; state.states.has(s) ? state.states.delete(s) : state.states.add(s); renderCoverage(); if (state.tab !== 'indicators') setTab('indicators'); else renderIndicators(); }
@@ -321,6 +360,8 @@ document.addEventListener('click', e => {
   else if (t.id === 'memo-stop') memoCtl?.abort();
   else if (t.id === 'memo-copy') copyMemo(t);
   else if (t.id === 'pdf-open') $('pdf').click();
+  else if (t.id === 'gemma-run') runGemma();
+  else if (t.id === 'gemma-stop') gemmaCtl?.abort();
 });
 document.addEventListener('toggle', e => {
   const d = e.target; if (!d.classList?.contains('ctl') || !d.open) return;

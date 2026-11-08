@@ -1,6 +1,6 @@
 {
   "name": "headstart-fedramp",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Reads an ISO/IEC 27001:2022 Statement of Applicability and shows how far it gets you toward FedRAMP 20x Class B, C or D.",
   "scripts": {
     "data": "python3 -I build/make_data.py ../crosswalk/data/reference.json data/fedramp.json",

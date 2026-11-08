@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.1.0 (2026-11-08)
+
+- SOC 2 PDF scanner: drop the report, pdf.js reads it in the browser, and a rules-based scanner fills the form with type, period, scope and every Section 4 exception, each with a confidence mark. Reads criteria-to-control mapping tables for reports that list results by control number.
+- On-device Gemma 4 E2B step (WebGPU) to resolve exceptions that could belong to more than one criterion. Opt-in; downloads the model once.
+- Masthead button covers both sources; US spelling throughout.
+
 ## 1.0.0 (2026-11-08)
 
 First release.

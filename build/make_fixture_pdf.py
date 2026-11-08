@@ -38,3 +38,21 @@ def report_b(path):
           P("Control A1.1-1 Capacity is monitored with alerting. Test: observed dashboards. Result: No exceptions noted.")]
     doc.build(f)
 report_a('test/fixtures/northwind-soc2-type2.pdf'); report_b('test/fixtures/contoso-soc2-type2.pdf'); print('fixtures written')
+
+def report_c(path):
+    # Layout C: criteria mapping table first, then results by control number only (hard case)
+    doc = SimpleDocTemplate(path, pagesize=letter); f = []
+    f += [P("Fabrikam Payments LLC", 'Title'), P("SOC 2 Type 2 Report on Fabrikam Payments LLC's Payment Gateway System relevant to security throughout the period October 1, 2025 to September 30, 2026.", 'BodyText'),
+          PageBreak(), P("Section 4: Tests of Controls and Results", 'Heading2'), P("Criteria to control mapping", 'Heading3')]
+    m = [["Criterion", "Controls"], ["CC6.1", "IAM-1, IAM-2"], ["CC6.3", "IAM-3"], ["CC7.1", "VULN-1"], ["CC7.2", "LOG-1"], ["CC8.1", "CHG-1, CHG-2"]]
+    f.append(Table([[P(c) for c in r] for r in m], colWidths=[80, 200]))
+    f += [Spacer(1, 12), P("Results of tests", 'Heading3')]
+    r = [["Control", "Description", "Result"],
+         ["IAM-1", "SSO enforced for production access.", "No exceptions noted."],
+         ["IAM-3", "Access removed on termination within 1 business day.", "Exception noted: 1 of 15 sampled terminations exceeded 1 business day."],
+         ["VULN-1", "Critical vulnerabilities remediated within 30 days.", "No exceptions noted."],
+         ["LOG-1", "Logs retained for 12 months.", "No exceptions noted."],
+         ["CHG-2", "Emergency changes reviewed after the fact.", "Deviation noted: 2 of 6 emergency changes had no post-implementation review."]]
+    t = Table([[P(c) for c in x] for x in r], colWidths=[60, 240, 230]); t.setStyle(TableStyle([('GRID', (0, 0), (-1, -1), 0.5, colors.grey)])); f.append(t)
+    doc.build(f)
+report_c('test/fixtures/fabrikam-soc2-type2.pdf'); print('fixture c written')

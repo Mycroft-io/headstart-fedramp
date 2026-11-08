@@ -11,3 +11,7 @@ controls. The standard is published by ISO and IEC and is not reproduced here.
 Fonts: TASA Orbiter and Inter under the SIL Open Font License 1.1 (assets/LICENSE-*.txt).
 
 PDF text extraction: pdf.js, Copyright Mozilla Foundation, Apache License 2.0.
+
+Optional on-device reading: Gemma 4 E2B (Google), provided under and subject to the Gemma Terms of Use
+(https://ai.google.dev/gemma/terms); downloaded by the user at run time, not distributed here. WebGPU runtime
+by the Hugging Face webml community (gemma-4-webgpu-kernels), loaded at run time from Hugging Face.

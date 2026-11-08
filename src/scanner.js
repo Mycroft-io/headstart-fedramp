@@ -20,10 +20,11 @@ const DATE = `(?:${MONTH}\\.?\\s+\\d{1,2},?\\s+\\d{4}|\\d{1,2}\\s+${MONTH}\\.?,?
 const PERIOD_RE = new RegExp(`(?:throughout|for|during|covering)\\s+the\\s+period\\s+(?:from\\s+)?(${DATE})\\s*(?:to|through|thru|until|[-–—])\\s*(${DATE})`, 'i');
 const ASOF_RE = new RegExp(`\\bas\\s+of\\s+(${DATE})`, 'i');
 const norm = s => String(s || '').replace(/\s+/g, ' ').trim();
+const keepLines = s => String(s || '').split('\n').map(l => l.replace(/[ \t\u00a0]+/g, ' ').trim()).filter(Boolean).join('\n');
 export const normCriterion = s => String(s || '').toUpperCase().replace(/\s+/g, '');
 
 export function scanReport(pages) {
-  const text = pages.map(norm).join('\n');
+  const text = pages.map(keepLines).join('\n');
   const head = pages.slice(0, Math.min(pages.length, 12)).map(norm).join('\n');
   const notes = [];
 
@@ -56,7 +57,19 @@ export function scanReport(pages) {
   const body = s4 ? text.slice(s4.index) : text;
   if (!s4) notes.push('Could not find the Section 4 heading, so the whole text was scanned for test results.');
 
-  // exceptions: each result phrase, attributed to the nearest criterion ID looking back, then forward
+  // control -> criterion map, from lines like "CC6.1  IAM-1, IAM-2" (a criteria-to-controls table) or "Control CC6.1-1"
+  const ctlMap = new Map();
+  const CTL = /\b([A-Z]{1,6}-\d{1,3}(?:\.\d{1,2})?)\b/g;
+  for (const line of body.split('\n')) {
+    const ids = [...line.matchAll(CRITERION_RE)].map(x => normCriterion(x[1]));
+    if (ids.length !== 1) continue;
+    const rest = line.replace(CRITERION_RE, ' ');
+    const ctls = [...rest.matchAll(CTL)].map(x => x[1]);
+    if (ctls.length && ctls.length <= 12 && rest.replace(CTL, '').replace(/[\s,;and]/g, '').length < 20) for (const c of ctls) if (!ctlMap.has(c)) ctlMap.set(c, ids[0]);
+  }
+  const RESULT_ANY = new RegExp(RESULT_PHRASES.map(([re]) => `(?:${re.source})`).join('|'), 'i');
+
+  // exceptions: each result phrase, attributed by control number through the map when possible, else to the nearest criterion ID
   const exceptions = []; const tested = new Set(); let cleanCount = 0;
   // collect every result phrase, then keep the earliest-starting of any overlapping matches
   const hits = [];
@@ -74,8 +87,16 @@ export function scanReport(pages) {
     const backIds = [...back.matchAll(CRITERION_RE)].map(x => ({ id: normCriterion(x[1]), pos: x.index }));
     const fwdIds = [...fwd.matchAll(CRITERION_RE)].map(x => normCriterion(x[1]));
     const near = backIds.length ? backIds[backIds.length - 1] : null;
-    const criterion = near ? near.id : fwdIds[0] || '';
-    const dist = near ? back.length - near.pos : fwdIds.length ? 1000 : Infinity;
+    const rowBack = back.slice(-220);
+    const ctlTok = [...rowBack.replace(CRITERION_RE, ' ').matchAll(CTL)].map(x => x[1]);
+    const mapped = ctlTok.map(c => ctlMap.get(c)).filter(Boolean);
+    let criterion = '', dist = Infinity, via = 'text';
+    if (mapped.length) { criterion = mapped[mapped.length - 1]; dist = 0; via = 'map'; }
+    else if (near) { criterion = near.id; dist = back.length - near.pos; }
+    else if (fwdIds.length) { criterion = fwdIds[0]; dist = 1000; }
+    // a result phrase between the criterion and this one means the criterion belongs to an earlier row
+    const between = near && via === 'text' ? back.slice(near.pos) : '';
+    const stale = via === 'text' && between && RESULT_ANY.test(between.slice(0, -1));
     if (criterion) tested.add(criterion);
     if (h.meaning === 'clean') { cleanCount++; continue; }
     if (h.meaning === 'not-tested') continue;
@@ -83,11 +104,12 @@ export function scanReport(pages) {
     const sentences = fwd.split(/(?<=[.!?])\s+(?=[A-Z])|\n/);
     let text = sentences[0] || ''; if (text.length < 40 && sentences[1]) text += ' ' + sentences[1];
     const nextId = fwd.search(CRITERION_RE); if (nextId > 0 && nextId < text.length) text = text.slice(0, nextId);
-    const ctl = /\b([A-Z]{1,4}[-.]?\d{1,3}(?:[-.]\d{1,2})?)\b/.exec(back.slice(-120).replace(CRITERION_RE, ''));
-    const confidence = !criterion ? 'low' : dist < 300 ? 'high' : dist < 700 ? 'medium' : 'low';
+    const ctl = ctlTok.length ? ctlTok[ctlTok.length - 1] : '';
+    const confidence = !criterion ? 'low' : via === 'map' ? 'high' : stale ? 'low' : dist < 300 ? 'high' : dist < 700 ? 'medium' : 'low';
     text = norm(text).replace(/^(?:exceptions?|deviations?)\s+(?:were\s+)?(?:noted|identified|found|observed)\s*[:.\-–—]?\s*/i, '').replace(/^result\s*:\s*/i, '');
     if (!text) text = 'Exception noted (see report).';
-    exceptions.push({ criterion, control: ctl ? ctl[1] : '', text: text.slice(0, 400), snippet: norm(back.slice(-160) + ' ' + text).slice(0, 600), confidence, offset: at });
+    const candidates = [...new Set([criterion, ...mapped, ...backIds.slice(-4).map(x => x.id), ...fwdIds.slice(0, 2), ...(stale ? [...ctlMap.values()] : [])].filter(Boolean))].slice(0, 8);
+    exceptions.push({ criterion, candidates, via, control: ctl, text: text.slice(0, 400), snippet: norm(back.slice(-160) + ' ' + text).slice(0, 600), confidence, offset: at });
   }
   exceptions.sort((a, b) => a.offset - b.offset);
   // merge duplicates on same criterion + near-identical text

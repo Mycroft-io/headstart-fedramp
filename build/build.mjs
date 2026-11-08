@@ -23,7 +23,7 @@ const page = fs.readFileSync('src/page.html', 'utf8').split('/*__LOGO__*/').join
   .replace('/*__DATA__*/', () => inline(data)).replace('/*__APP__*/', () => appJs);
 fs.mkdirSync('dist', { recursive: true });
 const hash = 'sha256-' + crypto.createHash('sha256').update(appJs).digest('base64');
-const csp = `default-src 'none'; script-src '${hash}'; style-src 'unsafe-inline'; img-src data:; font-src data:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`;
+const csp = `default-src 'none'; script-src '${hash}' https://huggingface.co blob:; worker-src blob:; connect-src https://huggingface.co https://*.huggingface.co https://*.hf.co; style-src 'unsafe-inline'; img-src data:; font-src data:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`;
 fs.writeFileSync('dist/_headers', fs.readFileSync('site/_headers', 'utf8').replace('{{CSP}}', csp));
 fs.writeFileSync('dist/artifact.html', page);
 fs.writeFileSync('dist/index.html', `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="description" content="Reads an ISO/IEC 27001:2022 Statement of Applicability and shows how far it gets you toward FedRAMP 20x Class B, C or D."><link rel="icon" href="data:,"><style>body{margin:0}[hidden]{display:none!important}</style></head><body>${page}</body></html>`);
