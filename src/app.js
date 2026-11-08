@@ -47,7 +47,6 @@ function showSource(src) {
   state.source = src;
   for (const b of document.querySelectorAll('.src-tab')) { const on = b.dataset.src === src; b.classList.toggle('on', on); b.setAttribute('aria-selected', String(on)); }
   $('src-iso').hidden = src !== 'iso'; $('src-soc2').hidden = src !== 'soc2';
-  $('open').hidden = src !== 'iso';
   $('empty-notes').hidden = true;
 }
 function clearAll() {
@@ -77,7 +76,7 @@ function showEmptyNote(t) { $('empty-notes').hidden = false; $('empty-notes').in
 // ---------- render ----------
 function refresh() {
   const has = !!state.soa;
-  $('empty').hidden = has; $('loaded').hidden = !has; $('clear').hidden = !has;
+  $('empty').hidden = has; $('loaded').hidden = !has; $('clear').hidden = !has; $('open').hidden = has;
   if (!has) return;
   $('empty-notes').hidden = true;
   state.model = C.buildModel(data, MAPPINGS[state.source], TITLES[state.source], state.soa, state.cls, state.source);
@@ -281,7 +280,8 @@ document.addEventListener('click', e => {
   if (t.dataset.tab) setTab(t.dataset.tab);
   else if (t.dataset.state) { const s = t.dataset.state; state.states.has(s) ? state.states.delete(s) : state.states.add(s); renderCoverage(); if (state.tab !== 'indicators') setTab('indicators'); else renderIndicators(); }
   else if (t.dataset.export) save(t.dataset.export, t);
-  else if (t.id === 'open' || t.hasAttribute('data-open')) $('file').click();
+  else if (t.id === 'open') { $('empty').scrollIntoView({ behavior: 'smooth', block: 'start' }); document.querySelector('.src-tab.on')?.focus({ preventScroll: true }); }
+  else if (t.hasAttribute('data-open')) $('file').click();
   else if (t.hasAttribute('data-sample')) loadSample(t.dataset.sample || 'iso');
   else if (t.dataset.src) showSource(t.dataset.src);
   else if (t.id === 'clear') clearAll();
