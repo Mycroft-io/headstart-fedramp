@@ -1,5 +1,5 @@
 {
-  "name": "headstart-20x",
+  "name": "headstart-fedramp",
   "version": "0.1.0",
   "description": "Reads an ISO/IEC 27001:2022 Statement of Applicability and shows how far it gets you toward FedRAMP 20x Class B, C or D.",
   "scripts": {
@@ -14,10 +14,10 @@
   "private": true,
   "type": "module",
   "license": "Apache-2.0",
-  "homepage": "https://github.com/Mycroft-io/iso27001-to-fedramp-20x",
+  "homepage": "https://github.com/Mycroft-io/headstart-fedramp",
   "repository": {
     "type": "git",
-    "url": "https://github.com/Mycroft-io/iso27001-to-fedramp-20x.git"
+    "url": "https://github.com/Mycroft-io/headstart-fedramp.git"
   },
   "author": "Mycroft Technologies Inc. (https://mycroft.io)",
   "devDependencies": {
