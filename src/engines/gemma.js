@@ -16,7 +16,12 @@ export function createGemmaEngine({ runtimeUrl = RUNTIME_URL, onProgress = () =>
     if (!hasWebGPU()) return false;
     loading ??= (async () => {
       onProgress({ status: 'runtime', message: 'Loading the WebGPU runtime' });
-      const mod = await import(/* @vite-ignore */ runtimeUrl);
+      // Hugging Face serves the file as text/plain, which browsers refuse to import as a module,
+      // so fetch it and import from an in-page blob. The bundle has no relative imports of its own.
+      const res = await fetch(runtimeUrl, { signal });
+      if (!res.ok) throw new Error(`runtime download failed (${res.status})`);
+      const blobUrl = URL.createObjectURL(new Blob([await res.text()], { type: 'text/javascript' }));
+      let mod; try { mod = await import(/* @vite-ignore */ blobUrl); } finally { URL.revokeObjectURL(blobUrl); }
       const Gemma4Mobile = mod.Gemma4Mobile || mod.default;
       if (!Gemma4Mobile?.load) throw new Error('runtime has no Gemma4Mobile.load');
       model = await Gemma4Mobile.load(MODEL_ID, { signal, onProgress: p => onProgress(p || {}) });
