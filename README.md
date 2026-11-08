@@ -1,5 +1,7 @@
 # Headstart 20x
 
+**Powered by Gemma.** On-device reading of SOC 2 reports runs [Gemma 4](https://ai.google.dev/gemma) in the browser; see [the Gemma step](#on-device-gemma-step).
+
 A single web page that reads an ISO/IEC 27001:2022 Statement of Applicability or a SOC 2 report and shows how far it gets you toward FedRAMP 20x Class B, C or D: where your program gives you a head start, where it falls short, and what 20x adds on top.
 
 It runs entirely in the browser. Nothing is uploaded, the page makes no network requests, and `dist/index.html` works when opened from disk. The copy published inside claude.ai adds two optional steps that ask Claude, on the viewer's own account and with their consent: reading a SOC 2 report's Section 4 into the form, and drafting a one-page readiness note from the result. The public site has neither and never contacts a model.
