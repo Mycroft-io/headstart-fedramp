@@ -199,6 +199,8 @@ async function gemmaSecondPass() {
   if (!lastScan || !lastPages || !gemmaReady) return;
   const status = $('scan-status'); passCtl?.abort(); passCtl = new AbortController();
   try {
+    status.textContent = 'Gemma is reading the opinion and scope…';
+    try { const g = await gemmaReadFrontMatter(lastPages, passCtl.signal); if (!passCtl.signal.aborted) { applyFrontMatter(lastScan, g); fillSoc2Form({ reportType: lastScan.reportType, period: lastScan.period, categories: lastScan.categories, exceptions: lastScan.exceptions.filter(e => e.criterion) }); renderFound(lastScan); } } catch (e) { if (passCtl.signal.aborted) return; }
     const body = lastPages.join('\n'); const i = body.search(/(?:section|part)\s*(?:4|IV)\b/i);
     const extra = await gemmaReadExceptions(i >= 0 ? body.slice(i) : body, passCtl.signal, s => { status.textContent = s; });
     if (passCtl.signal.aborted) return;
@@ -234,13 +236,14 @@ function renderFound(r) {
   const found = $('scan-found');
   const conf = c => `<span class="conf conf-${c}">${c}</span>`;
   found.hidden = false;
+  const gf = r.gemmaFields || new Set(); const tag = k => (gf.has(k) ? ' <span class="gemma-tag">Gemma</span>' : '');
   const meta = [
-    r.serviceOrganization && ['Organization', esc(r.serviceOrganization)], r.system && ['System', esc(r.system)], r.auditor && ['Auditor', esc(r.auditor)],
-    ['Report', `${esc(r.reportType)} ${conf(r.typeConf)}`], r.period && ['Period', esc(r.period)],
-    ['Categories in scope', `${r.categories.map(c => esc(tsc.categories[c] || c)).join(', ')} ${conf(r.catConf)}`],
+    r.serviceOrganization && ['Organization', esc(r.serviceOrganization) + tag('serviceOrganization')], r.system && ['System', esc(r.system) + tag('system')], r.auditor && ['Auditor', esc(r.auditor) + tag('auditor')],
+    ['Report', `${esc(r.reportType)} ${conf(r.typeConf)}${tag('reportType')}`], r.period && ['Period', esc(r.period) + tag('period')],
+    ['Categories in scope', `${r.categories.map(c => esc(tsc.categories[c] || c)).join(', ')} ${conf(r.catConf)}${tag('categories')}`],
     ['Criteria referenced', `${r.criteriaInReport.length}${r.criteriaTested.length ? ` (${r.criteriaTested.length} with test results)` : ''}`],
-    (r.subservice.length || r.carveOut) && ['Subservice organizations', `${r.subservice.map(esc).join(', ') || 'named in the report'}${r.carveOut ? `, ${esc(r.carveOut)} method` : ''} <span class="dim">(declare these as third-party resources in 20x)</span>`],
-    r.cuecCount && ['Complementary user entity controls', `${r.cuecCount} listed`],
+    (r.subservice.length || r.carveOut) && ['Subservice organizations', `${r.subservice.map(esc).join(', ') || 'named in the report'}${r.carveOut ? `, ${esc(r.carveOut)} method` : ''}${tag('subservice')} <span class="dim">(declare these as third-party resources in 20x)</span>`],
+    r.cuecCount && ['Complementary user entity controls', `${r.cuecCount} listed${tag('cuecCount')}`],
     r.locations.length && ['Locations', r.locations.map(esc).join('; ')],
   ].filter(Boolean);
   found.innerHTML = `<dl class="facts found-facts">${meta.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('')}</dl>
@@ -342,6 +345,50 @@ async function gemmaReadExceptions(body, signal, onStatus) {
   }
   return [...seen.values()];
 }
+// Gemma reads the front of the report (opinion, scope, subservice passages) into fixed fields.
+async function gemmaReadFrontMatter(pages, signal) {
+  const text = pages.join('\n');
+  const head = text.slice(0, 9000);
+  const windows = [];
+  for (const m of text.matchAll(/subservice\s+organi[sz]ations?|carve[-\s]?out|inclusive\s+method|complementary\s+subservice/gi)) {
+    const w = text.slice(Math.max(0, m.index - 600), m.index + 900);
+    if (!windows.some(x => x.includes(w.slice(200, 400)))) windows.push(w);
+    if (windows.length >= 4) break;
+  }
+  const prompt = `Read these excerpts from a SOC 2 report and fill in the fields below from the text only. Write one field per line exactly as "FIELD | value". If the text does not say, write "FIELD | unknown". Write nothing else.
+ORGANIZATION | the service organization that is the subject of the report
+SYSTEM | the system or service described
+AUDITOR | the CPA firm that issued the opinion
+TYPE | Type 1 or Type 2
+PERIOD | the examination period or as-of date, as written
+CATEGORIES | the trust services categories in scope, from: security, availability, confidentiality, processing integrity, privacy
+SUBSERVICE | each subservice organization named, separated by semicolons, each followed by (carve-out) or (inclusive) if stated
+CUECS | the number of complementary user entity controls listed, or unknown
+
+EXCERPTS:
+${head}
+${windows.length ? '\n--- subservice organization passages ---\n' + windows.join('\n---\n') : ''}`;
+  const out = await gemma.complete(prompt, { maxNewTokens: 260, signal });
+  const f = {};
+  for (const line of out.split('\n')) { const m = /^\s*(ORGANIZATION|SYSTEM|AUDITOR|TYPE|PERIOD|CATEGORIES|SUBSERVICE|CUECS)\s*\|\s*(.+?)\s*$/i.exec(line); if (m && !/^unknown$/i.test(m[2].trim())) f[m[1].toUpperCase()] = m[2].trim(); }
+  const cats = f.CATEGORIES ? ['security', 'availability', 'confidentiality', 'processing', 'privacy'].filter(c => new RegExp(c === 'processing' ? 'processing' : c, 'i').test(f.CATEGORIES)) : null;
+  const subs = f.SUBSERVICE ? f.SUBSERVICE.split(/;|,\s(?=[A-Z])/).map(s => s.trim()).filter(s => s && !/^(none|n\/a|unknown)$/i.test(s)).slice(0, 10) : null;
+  const method = /carve/i.test(f.SUBSERVICE || '') ? 'carve-out' : /inclusive/i.test(f.SUBSERVICE || '') ? 'inclusive' : '';
+  return { organization: f.ORGANIZATION || '', system: f.SYSTEM || '', auditor: f.AUDITOR || '', type: /1\b|\bI\b/.test(f.TYPE || '') && !/2|II/.test(f.TYPE || '') ? 'Type 1' : /2|II/.test(f.TYPE || '') ? 'Type 2' : '', period: f.PERIOD || '', categories: cats, subservice: subs, method, cuecs: /^\d+$/.test(f.CUECS || '') ? +f.CUECS : null };
+}
+// Apply Gemma's front-matter reading where the rules were unsure or silent; mark what came from Gemma.
+function applyFrontMatter(r, g) {
+  r.gemmaFields = r.gemmaFields || new Set();
+  const set = (k, v) => { if (v) { r[k] = v; r.gemmaFields.add(k); } };
+  if (!r.serviceOrganization && g.organization) set('serviceOrganization', g.organization);
+  if (!r.system && g.system) set('system', g.system);
+  if (!r.auditor && g.auditor) set('auditor', g.auditor);
+  if (r.typeConf !== 'high' && g.type) { set('reportType', g.type); r.typeConf = 'medium'; }
+  if (!r.period && g.period) set('period', g.period);
+  if (g.categories && g.categories.length && (r.catConf !== 'high' || g.categories.length > r.categories.length)) { set('categories', [...new Set(['security', ...g.categories])]); r.catConf = 'medium'; }
+  if (g.subservice && g.subservice.length) { set('subservice', [...new Set([...(r.subservice || []), ...g.subservice.map(s => s.replace(/\s*\((?:carve-out|inclusive)\)\s*$/i, ''))])]); if (!r.carveOut && g.method) r.carveOut = g.method; }
+  if (!r.cuecCount && g.cuecs) set('cuecCount', g.cuecs);
+}
 function mergeExceptions(base, extra) {
   const merged = [...base.filter(e => e.criterion)];
   for (const g of extra) if (!merged.some(e => e.criterion === g.criterion && e.text.slice(0, 30).toLowerCase() === g.text.slice(0, 30).toLowerCase())) merged.push(g);
@@ -361,6 +408,8 @@ async function aiExtract() {
     status.textContent = 'Loading Gemma…';
     if (!(await ensureGemma())) { status.textContent = 'Gemma is not available in this browser; the scanner\'s reading is in the form above.'; renderFound(r); found.hidden = false; return; }
     aiCtl = new AbortController();
+    status.textContent = 'Gemma is reading the opinion and scope…';
+    try { const g = await gemmaReadFrontMatter([text], aiCtl.signal); applyFrontMatter(r, g); } catch (e) { if (aiCtl.signal.aborted) throw e; }
     const extra = await gemmaReadExceptions(text, aiCtl.signal, s => { status.textContent = s; });
     const seen = extra; const merged = mergeExceptions(r.exceptions, extra);
     r.exceptions = merged; lastScan = r;
