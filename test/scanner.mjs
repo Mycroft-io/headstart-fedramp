@@ -13,7 +13,7 @@ async function pages(path) {
 const a = scanReport(await pages('test/fixtures/northwind-soc2-type2.pdf'));
 console.log('A', a.reportType, a.period, a.categories, a.serviceOrganization, a.exceptions.map(e => [e.criterion, e.confidence]), 'tested', a.criteriaTested.length, 'clean', a.cleanCount, a.notes);
 assert.equal(a.reportType, 'Type 2'); assert.match(a.period, /July 1, 2025 to June 30, 2026/);
-assert.deepEqual([...a.categories].sort(), ['availability', 'security']);
+assert.deepEqual([...a.categories].sort(), ['availability', 'security'], 'C1 mentioned as out of scope must not add confidentiality'); assert.equal(a.catConf, 'high'); assert.ok(a.sections.s1 && a.sections.s2);
 assert.deepEqual(a.exceptions.map(e => e.criterion), ['CC6.3', 'CC7.1', 'CC8.1']);
 assert.ok(a.exceptions.every(e => e.confidence === 'high'), 'table layout: high confidence');
 assert.ok(a.section4Found);

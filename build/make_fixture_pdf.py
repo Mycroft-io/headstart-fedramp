@@ -14,6 +14,9 @@ def report_a(path):
           P("Complementary User Entity Controls", 'Heading3'),
           P("1. User entities are responsible for provisioning and deprovisioning their own users."), P("2. User entities are responsible for configuring MFA for their users."), P("3. User entities are responsible for classifying the data they upload."),
           P("In our opinion, in all material respects, the controls stated in the description were suitably designed and operated effectively to provide reasonable assurance that the service commitments and system requirements were achieved based on the applicable trust services criteria relevant to security and availability (applicable trust services criteria) set forth in TSP section 100."),
+          PageBreak(), P("Section 2: Management's Assertion", 'Heading2'),
+          P("We assert that the controls were effective to provide reasonable assurance that the service commitments and system requirements were achieved based on the applicable trust services criteria relevant to security and availability. Confidentiality criteria (C1.1, C1.2) were not included in the scope of this examination."),
+          PageBreak(), P("Section 3: Description of the System", 'Heading2'), P("The Analytics Platform ingests customer event data and produces dashboards."),
           PageBreak(), P("Section 4: Trust Services Criteria, Related Controls, and Tests of Controls and Results", 'Heading2')]
     rows = [["Criteria", "Control #", "Control Activity", "Test Performed", "Results"],
             ["CC6.1", "AC-01", "Access to production is restricted to authorized personnel via SSO with MFA.", "Inspected SSO configuration.", "No exceptions noted."],

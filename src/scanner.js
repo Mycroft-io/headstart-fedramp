@@ -23,9 +23,25 @@ const norm = s => String(s || '').replace(/\s+/g, ' ').trim();
 const keepLines = s => String(s || '').split('\n').map(l => l.replace(/[ \t\u00a0]+/g, ' ').trim()).filter(Boolean).join('\n');
 export const normCriterion = s => String(s || '').toUpperCase().replace(/\s+/g, '');
 
+// Positions of the report's main sections, by their headings. Missing ones are -1.
+export function sectionIndex(text) {
+  const find = (n, roman, words) => { const re = new RegExp(`(?:^|\\n)\\s*(?:section|part)\\s*(?:${n}|${roman})\\b[^\\n]{0,160}`, 'gi'); let best = -1; for (const m of text.matchAll(re)) { if (words.test(m[0])) { best = m.index; break; } if (best < 0) best = m.index; } return best; };
+  return {
+    s1: find(1, 'I', /auditor|opinion|report/i), s2: find(2, 'II', /assertion|management/i),
+    s3: find(3, 'III', /description|system/i), s4: find(4, 'IV', /test|control|result/i),
+  };
+}
+export function scopeText(text) {
+  const ix = sectionIndex(text);
+  const slice = (a, b) => (a >= 0 ? text.slice(a, b > a ? b : a + 12000) : '');
+  const s1 = slice(ix.s1, ix.s2 > ix.s1 ? ix.s2 : ix.s3), s2 = slice(ix.s2, ix.s3 > ix.s2 ? ix.s3 : ix.s4);
+  return { s1, s2, ix };
+}
 export function scanReport(pages) {
   const text = pages.map(keepLines).join('\n');
-  const head = pages.slice(0, Math.min(pages.length, 12)).map(norm).join('\n');
+  const { s1, s2 } = scopeText(text);
+  const cover = pages.slice(0, Math.min(pages.length, 3)).map(norm).join('\n');
+  const head = ((s1 || s2) ? cover + '\n' + norm(s1 + '\n' + s2) : pages.slice(0, Math.min(pages.length, 12)).map(norm).join('\n')).slice(0, 40000);
   const notes = [];
 
   // report type and period
@@ -39,13 +55,12 @@ export function scanReport(pages) {
 
   // categories: the opinion's "relevant to security, availability ..." phrase, else criteria present
   const categories = new Set(['security']); let catConf = 'low';
-  const rel = /(?:relevant\s+to|criteria\s+for|trust\s+services\s+criteria\s+(?:for|relevant\s+to))\s+([^.;:]{0,160}?)(?:\s+\(|set\s+forth|\.|;|:)/gi;
+  const rel = /(?:relevant\s+to|criteria\s+for|trust\s+services\s+criteria\s+(?:for|relevant\s+to)|based\s+on\s+the\s+(?:applicable\s+)?trust\s+services\s+criteria\s+(?:for|relevant\s+to)|commitments\s+and\s+system\s+requirements\s+(?:relevant\s+to|for))\s+([^.;:]{0,200}?)(?:\s+\(|set\s+forth|\.|;|:|\s+in\s+TSP|\s+\bcriteria\b)/gi;
   let m; const catHits = {};
   while ((m = rel.exec(head)) !== null) for (const [cat, re] of Object.entries(CATEGORY_WORDS)) if (re.test(m[1])) catHits[cat] = (catHits[cat] || 0) + 1;
-  if (Object.keys(catHits).length) { for (const c of Object.keys(catHits)) categories.add(c); catConf = 'high'; }
+  if (Object.keys(catHits).length) { for (const c of Object.keys(catHits)) categories.add(c); catConf = (s1 || s2) ? 'high' : 'medium'; }
   const presentIds = new Set([...text.matchAll(CRITERION_RE)].map(x => normCriterion(x[1])));
   const byPrefix = { availability: /^A1\./, confidentiality: /^C1\./, processing: /^PI1\./, privacy: /^P[1-8]\./ };
-  for (const [cat, re] of Object.entries(byPrefix)) if ([...presentIds].some(id => re.test(id))) { if (!categories.has(cat)) { categories.add(cat); if (catConf === 'low') catConf = 'medium'; } }
 
   // service organization: "Report on <Name>'s ..." or "<Name>'s description of its ... system"
   let serviceOrganization = '';
@@ -143,6 +158,8 @@ export function scanReport(pages) {
   const merged = [];
   for (const e of exceptions) { const d = merged.find(x => x.criterion === e.criterion && x.text.slice(0, 80) === e.text.slice(0, 80)); if (!d) merged.push(e); }
 
+  // scope fallback: categories whose criteria actually carry test results (not merely mentioned somewhere)
+  if (!Object.keys(catHits).length) for (const [cat, re] of Object.entries(byPrefix)) if ([...tested].some(id => re.test(id))) { categories.add(cat); if (catConf === 'low') catConf = 'medium'; }
   const criteriaTested = [...tested].sort();
   if (!cleanCount && !merged.length) notes.push('No test result phrases ("no exceptions noted", "exception noted") were found. This may not be a SOC 2 report, or the PDF text may not be extractable (scanned image).');
   if (merged.some(e => e.confidence !== 'high')) notes.push('Some exceptions could not be tied confidently to a criterion. Check the ones marked medium or low before reading the report.');
@@ -150,7 +167,7 @@ export function scanReport(pages) {
   const criteriaInReport = [...presentIds].sort();
   return {
     reportType, period, typeConf, categories: [...categories], catConf, serviceOrganization, auditor, system,
-    subservice: [...subservice], carveOut, cuecCount, locations, criteriaInReport,
+    subservice: [...subservice], carveOut, cuecCount, locations, criteriaInReport, sections: { s1: !!s1, s2: !!s2 },
     exceptions: merged, criteriaTested, cleanCount, notes, pages: pages.length, chars: text.length,
     section4Found: !!s4,
   };

@@ -1,6 +1,6 @@
 import { zipSync, strToU8, unzipSync, strFromU8 } from 'fflate';
 import * as C from './core.js';
-import { scanReport } from './scanner.js';
+import { scanReport, scopeText } from './scanner.js';
 import { pdfToPages } from './pdftext.js';
 import { createGemmaEngine, hasWebGPU, probeWebGPU, DOWNLOAD_NOTE } from './engines/gemma.js';
 
@@ -348,7 +348,10 @@ async function gemmaReadExceptions(body, signal, onStatus) {
 // Gemma reads the front of the report (opinion, scope, subservice passages) into fixed fields.
 async function gemmaReadFrontMatter(pages, signal) {
   const text = pages.join('\n');
-  const head = text.slice(0, 9000);
+  const { s1, s2 } = scopeText(text);
+  const head = (s1 || s2)
+    ? `--- SECTION 1: INDEPENDENT SERVICE AUDITOR'S REPORT ---\n${s1.slice(0, 6000)}\n\n--- SECTION 2: MANAGEMENT'S ASSERTION ---\n${s2.slice(0, 5000)}`
+    : text.slice(0, 9000);
   const windows = [];
   for (const m of text.matchAll(/subservice\s+organi[sz]ations?|carve[-\s]?out|inclusive\s+method|complementary\s+subservice/gi)) {
     const w = text.slice(Math.max(0, m.index - 600), m.index + 900);
@@ -361,7 +364,7 @@ SYSTEM | the system or service described
 AUDITOR | the CPA firm that issued the opinion
 TYPE | Type 1 or Type 2
 PERIOD | the examination period or as-of date, as written
-CATEGORIES | the trust services categories in scope, from: security, availability, confidentiality, processing integrity, privacy
+CATEGORIES | the trust services categories the report covers, exactly as stated in the auditor's opinion or management's assertion (phrases like "relevant to security, availability, and confidentiality"), from: security, availability, confidentiality, processing integrity, privacy. List only those stated as in scope; do not infer from other mentions
 SUBSERVICE | each subservice organization named, separated by semicolons, each followed by (carve-out) or (inclusive) if stated
 CUECS | the number of complementary user entity controls listed, or unknown
 
@@ -385,7 +388,12 @@ function applyFrontMatter(r, g) {
   if (!r.auditor && g.auditor) set('auditor', g.auditor);
   if (r.typeConf !== 'high' && g.type) { set('reportType', g.type); r.typeConf = 'medium'; }
   if (!r.period && g.period) set('period', g.period);
-  if (g.categories && g.categories.length && (r.catConf !== 'high' || g.categories.length > r.categories.length)) { set('categories', [...new Set(['security', ...g.categories])]); r.catConf = 'medium'; }
+  // Gemma's reading of Sections 1 and 2 decides the scope; the rules' reading is kept only when the two agree
+  if (g.categories && g.categories.length) {
+    const next = [...new Set(['security', ...g.categories])];
+    const same = next.length === r.categories.length && next.every(c => r.categories.includes(c));
+    if (!same) { set('categories', next); r.catConf = 'medium'; } else if (r.catConf !== 'high') r.catConf = 'high';
+  }
   if (g.subservice && g.subservice.length) { set('subservice', [...new Set([...(r.subservice || []), ...g.subservice.map(s => s.replace(/\s*\((?:carve-out|inclusive)\)\s*$/i, ''))])]); if (!r.carveOut && g.method) r.carveOut = g.method; }
   if (!r.cuecCount && g.cuecs) set('cuecCount', g.cuecs);
 }
