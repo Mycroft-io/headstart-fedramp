@@ -89,7 +89,9 @@ export function scanReport(pages) {
     const near = backIds.length ? backIds[backIds.length - 1] : null;
     const rowBack = back.slice(-220);
     const ctlTok = [...rowBack.replace(CRITERION_RE, ' ').matchAll(CTL)].map(x => x[1]);
-    const mapped = ctlTok.map(c => ctlMap.get(c)).filter(Boolean);
+    // only the row's own control (the last token before the result) may resolve through the map
+    const lastCtl = ctlTok.length ? ctlTok[ctlTok.length - 1] : '';
+    const mapped = lastCtl && ctlMap.has(lastCtl) ? [ctlMap.get(lastCtl)] : [];
     let criterion = '', dist = Infinity, via = 'text';
     if (mapped.length) { criterion = mapped[mapped.length - 1]; dist = 0; via = 'map'; }
     else if (near) { criterion = near.id; dist = back.length - near.pos; }
@@ -108,7 +110,7 @@ export function scanReport(pages) {
     const confidence = !criterion ? 'low' : via === 'map' ? 'high' : stale ? 'low' : dist < 300 ? 'high' : dist < 700 ? 'medium' : 'low';
     text = norm(text).replace(/^(?:exceptions?|deviations?)\s+(?:were\s+)?(?:noted|identified|found|observed)\s*[:.\-–—]?\s*/i, '').replace(/^result\s*:\s*/i, '');
     if (!text) text = 'Exception noted (see report).';
-    const candidates = [...new Set([criterion, ...mapped, ...backIds.slice(-4).map(x => x.id), ...fwdIds.slice(0, 2), ...(stale ? [...ctlMap.values()] : [])].filter(Boolean))].slice(0, 8);
+    const candidates = [...new Set([criterion, ...mapped, ...backIds.slice(-4).map(x => x.id), ...fwdIds.slice(0, 2), ...(via === 'text' && ctlMap.size ? [...new Set(ctlMap.values())] : [])].filter(Boolean))].slice(0, 8);
     exceptions.push({ criterion, candidates, via, control: ctl, text: text.slice(0, 400), snippet: norm(back.slice(-160) + ' ' + text).slice(0, 600), confidence, offset: at });
   }
   exceptions.sort((a, b) => a.offset - b.offset);
