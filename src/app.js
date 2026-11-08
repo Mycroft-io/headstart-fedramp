@@ -194,6 +194,7 @@ async function save(id, btn) {
 let lastScan = null;
 async function scanPdf(f) {
   if (!f) return;
+  if (!$('empty').hidden || true) $('empty').scrollIntoView?.({ block: 'start' });
   showSource('soc2');
   const status = $('scan-status'), found = $('scan-found');
   found.hidden = true; status.textContent = 'Reading the PDF…';
@@ -385,8 +386,9 @@ addEventListener('dragleave', () => { if (--depth <= 0) { depth = 0; document.bo
 addEventListener('dragover', e => e.preventDefault());
 addEventListener('drop', e => { e.preventDefault(); depth = 0; document.body.classList.remove('dragging'); const f = e.dataTransfer?.files?.[0]; if (!f) return; if (/\.pdf$/i.test(f.name) || f.type === 'application/pdf') scanPdf(f); else loadFile(f); });
 document.addEventListener('submit', e => { if (e.target.id === 'soc2-form') { e.preventDefault(); readSoc2Form(); } });
-addEventListener('hashchange', () => { if (location.hash === '#sample') loadSample('iso'); else if (location.hash === '#sample-soc2') loadSample('soc2'); else setTab(location.hash.slice(1), true); });
+function sampleScan() { const bytes = Uint8Array.from(atob(sample.pdf), c => c.charCodeAt(0)); scanPdf(new File([bytes], 'fabrikam-soc2-type2-sample.pdf', { type: 'application/pdf' })); }
+addEventListener('hashchange', () => { if (location.hash === '#sample') loadSample('iso'); else if (location.hash === '#sample-soc2') loadSample('soc2'); else if (location.hash === '#sample-scan') sampleScan(); else setTab(location.hash.slice(1), true); });
 
 $('rules-version').textContent = data.rulesVersion;
 state.tab = TABS.includes(location.hash.slice(1)) ? location.hash.slice(1) : 'indicators';
-if (location.hash === '#sample') loadSample('iso'); else if (location.hash === '#sample-soc2') loadSample('soc2'); else refresh();
+if (location.hash === '#sample') loadSample('iso'); else if (location.hash === '#sample-soc2') loadSample('soc2'); else { refresh(); if (location.hash === '#sample-scan') sampleScan(); }

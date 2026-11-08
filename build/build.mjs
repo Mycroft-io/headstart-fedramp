@@ -14,7 +14,7 @@ const inline = o => JSON.stringify(o).replace(/</g, '\\u003c');
 const data = {
   fedramp: JSON.parse(fs.readFileSync('data/fedramp.json', 'utf8')), mapping: JSON.parse(fs.readFileSync('data/mapping.json', 'utf8')),
   mappingSoc2: JSON.parse(fs.readFileSync('data/mapping-soc2.json', 'utf8')), annex: JSON.parse(fs.readFileSync('data/annex-a.json', 'utf8')), tsc: JSON.parse(fs.readFileSync('data/tsc.json', 'utf8')),
-  sample: { name: 'Northwind Analytics Ltd. (fictional sample SoA)', csv: fs.readFileSync('samples/northwind-soa-2022.csv', 'utf8').replace(/^\ufeff/, ''), soc2: JSON.parse(fs.readFileSync('samples/northwind-soc2.json', 'utf8')) },
+  sample: { name: 'Northwind Analytics Ltd. (fictional sample SoA)', csv: fs.readFileSync('samples/northwind-soa-2022.csv', 'utf8').replace(/^\ufeff/, ''), soc2: JSON.parse(fs.readFileSync('samples/northwind-soc2.json', 'utf8')), pdf: fs.readFileSync('test/fixtures/fabrikam-soc2-type2.pdf').toString('base64') },
 };
 const b64 = (f, mime) => `data:${mime};base64,` + fs.readFileSync('assets/' + f).toString('base64');
 const appJs = js.replace(/<\/script/gi, '<\\/script');
