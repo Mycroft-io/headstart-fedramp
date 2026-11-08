@@ -230,13 +230,13 @@ export function buildModel(data, mapping, annex, soa, cls, source = 'iso') {
 
 export const NOTICE = 'Headstart 20x is a planning aid. It maps FedRAMP 20x Key Security Indicators to ISO/IEC 27001:2022 Annex A controls and to the SOC 2 Trust Services Criteria, and reads your SoA or report against that mapping. A control being implemented or a criterion being clean does not mean the indicator is met: 20x asks for cloud-native, automated and continuously evidenced outcomes, and for FedRAMP-specific requirements that ISO 27001 does not contain. The mapping is Mycroft\'s, not FedRAMP\'s.';
 
-export function ksiRows(model) {
-  const head = ['KSI', 'Name', 'Theme', 'Readiness', `Related ${model.src.units} (strength)`, 'Covered', 'Not covered', 'What 20x adds', 'KSI statement'];
+export function ksiRows(model, notes = new Map()) {
+  const head = ['KSI', 'Name', 'Theme', 'Readiness', `Related ${model.src.units} (strength)`, 'Covered', 'Not covered', 'What 20x adds', 'KSI statement', 'Gemma interpretation (on-device)'];
   return [head, ...model.ksis.map(k => [k.id, k.name, k.theme, k.optional ? `${model.states[k.state].label} (optional in Class B)` : model.states[k.state].label,
     k.links.map(l => `${l.id} ${l.title} (${l.strength})`).join('\n'),
     k.links.filter(l => l.covered).map(l => l.id).join(', '),
     k.links.filter(l => !l.covered).map(l => `${l.id}: ${l.flagged && model.source === 'soc2' ? 'exception' : !l.listed ? (model.source === 'soc2' ? 'not in scope' : 'not in SoA') : !l.applicable ? 'not applicable' : l.status || 'no status'}`).join('\n'),
-    k.adds, k.statement])];
+    k.adds, k.statement, notes.get(k.id) || ''])];
 }
 export function ruleRows(model) {
   return [['Rule', 'Name', 'Rule set', 'Applies to classes', 'Statement'], ...model.frr.map(r => [r.id, r.name, r.set, r.classes.map(c => c.toUpperCase()).join(', '), r.statement])];
@@ -279,7 +279,7 @@ export function toXlsx(sheets, zip, enc) {
   });
   return zip(Object.fromEntries(Object.entries(files).map(([k, v]) => [k, enc(v)])));
 }
-export function workbookSheets(model, meta) {
+export function workbookSheets(model, meta, notes = new Map()) {
   const summary = [['Field', 'Value'], ['Source', model.src.label], ['Target', `FedRAMP 20x ${CLASSES[model.cls]}`], ['Generated', meta.generated], ['FedRAMP rules version', model.rulesVersion],
     [`${model.src.units} read`, model.soaStats.listed], ['Applicable / in scope', model.soaStats.applicable], ['Implemented / clean', model.soaStats.implemented],
     ...STATE_ORDER.map(s => [`KSIs: ${model.states[s].label}`, model.counts[s]]), ['KSIs scored', model.scored], ['KSIs optional in this class', model.optionalSkipped],
@@ -287,7 +287,7 @@ export function workbookSheets(model, meta) {
   return [
     { name: 'Summary', rows: summary, widths: [40, 90] },
     { name: 'Work plan', rows: workplanRows(model), widths: [9, 40, 22, 60, 30, 80] },
-    { name: 'KSI readiness', rows: ksiRows(model), widths: [14, 34, 28, 16, 60, 24, 40, 80, 80] },
+    { name: 'KSI readiness', rows: ksiRows(model, notes), widths: [14, 34, 28, 16, 60, 24, 40, 80, 80, 90] },
     { name: 'FedRAMP rules', rows: ruleRows(model), widths: [16, 40, 34, 14, 100] },
     ...(model.soc2 ? [{ name: 'SOC 2 input', rows: [['Field', 'Value'], ['Report type', model.soc2.reportType || ''], ['Period', model.soc2.period || ''], ['Categories in scope', (model.soc2.categories || []).join(', ')], ...(model.soc2.exceptions || []).map(e => ['Exception ' + e.criterion, e.text])], widths: [28, 100] }] : []),
   ];

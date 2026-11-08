@@ -2,6 +2,8 @@
 
 ## 1.3.0 (2026-11-08)
 
+- Gemma interprets: a per-indicator "Interpret with Gemma" note (where you stand, what is missing, what to do first), "Interpret all open indicators" on the Work plan tab with the notes exported to the workbook, and a second read of Section 4 after every PDF scan when Gemma is loaded.
+- Masthead button reads "Power up with Gemma" and settles to "Gemma ready · local, fully in your browser".
 - All AI steps now run on Gemma 4 on the device: pasted-text reading, uncertain-exception attribution, and the readiness note. The Claude steps that existed only inside claude.ai are removed.
 - "Power up local AI" button in the masthead loads Gemma from anywhere on the page.
 

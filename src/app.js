@@ -115,7 +115,8 @@ function ksiBody(k) {
   const src = state.model.src;
   return `<div class="cols"><section><h4>Related ${esc(src.units)}${state.source === 'soc2' ? ' in your report' : ' in your SoA'}</h4><ul class="links">${k.links.map(l => `<li><span class="mono id">${esc(l.id)}</span><span>${esc(l.title)} <span class="dim">(${l.strength})</span>${l.flagged && l.note ? `<div class="dim" style="font-size:13px">${esc(l.note)}</div>` : ''}</span><span class="tag ${l.covered ? 't-ok' : l.flagged ? 't-bad' : l.status === 'partial' ? 't-warn' : ''}">${esc(statusWord(l))}</span></li>`).join('')}</ul>
       <p class="rule-text">${esc(k.statement)}</p></section>
-    <section><h4>What 20x adds</h4><div class="adds"><strong>Beyond ${state.source === 'soc2' ? 'SOC 2' : 'ISO 27001'}</strong>${esc(k.adds)}</div>${k.optional ? '<p class="dim" style="font-size:13px">Optional for Class B.</p>' : ''}</section></div>`;
+    <section><h4>What 20x adds</h4><div class="adds"><strong>Beyond ${state.source === 'soc2' ? 'SOC 2' : 'ISO 27001'}</strong>${esc(k.adds)}</div>${k.optional ? '<p class="dim" style="font-size:13px">Optional for Class B.</p>' : ''}
+    ${hasWebGPU() ? `<div class="interp-wrap"><button type="button" class="btn small-btn" data-interpret="${esc(k.id)}"><span class="spark" aria-hidden="true">✦</span> ${interpretations.has(k.id) ? 'Show Gemma\'s interpretation' : 'Interpret with Gemma'}</button><div class="interp memo" ${interpretations.has(k.id) ? '' : 'hidden'}>${esc(interpretations.get(k.id) || '')}</div>${interpretations.has(k.id) ? '<p class="dim" style="font-size:12px">Written on this device by Gemma 4 from the reading above.</p>' : ''}</div>` : ''}</section></div>`;
 }
 function renderIndicators() {
   const m = state.model; const q = state.q.trim().toLowerCase();
@@ -157,7 +158,9 @@ const EXPORTS = [
 function renderExport() {
   const m = state.model; const top = C.workplanRows(m).slice(1).filter(r => r[0] === 1).slice(0, 8);
   $('view').innerHTML = `<p class="lede">Start with the indicators where ISO gives you nothing to build on${top.length ? `: ${top.map(r => `<strong>${esc(r[1].split(' ')[0])}</strong>`).join(', ')}` : ''}. Then extend the partials, then plan the FedRAMP rule sets as new program work. ${esc(C.NOTICE)}</p>
-    ${hasWebGPU() ? `<div class="ai memo-card" style="margin-bottom:14px"><div class="ai-head"><span class="spark" aria-hidden="true">✦</span><strong>Draft a readiness summary with Gemma, on this device</strong></div><p class="dim">A short note for your leadership from the reading above: where you stand for ${esc(C.CLASSES[m.cls])}, the first gaps to close, and what the FedRAMP rules add. Written by Gemma 4 running in this browser from the computed result; nothing leaves your machine. ${gemmaReady ? '' : 'Loads Gemma first (about 2 GB, once). '}Check it before you send it.</p>
+    ${hasWebGPU() ? `<div class="ai memo-card" style="margin-bottom:14px"><div class="ai-head"><span class="spark" aria-hidden="true">✦</span><strong>Interpret every open indicator with Gemma, on this device</strong></div><p class="dim">Gemma writes a short note for each indicator that is not a head start: where you stand, what is missing, what to do first. ${m.ksis.filter(k => !k.optional && k.state !== 'head').length} indicators; a minute or two each on a laptop. Notes appear in the Indicators tab and in the workbook export.</p>
+      <div class="row" style="justify-content:flex-start;align-items:center"><button type="button" class="btn cta" id="all-run">Interpret all open indicators</button><button type="button" class="btn" id="all-stop" hidden>Stop</button><span id="all-status" class="dim" role="status" aria-live="polite">${interpretations.size ? `${interpretations.size} interpreted so far.` : ''}</span></div></div>
+    <div class="ai memo-card" style="margin-bottom:14px"><div class="ai-head"><span class="spark" aria-hidden="true">✦</span><strong>Draft a readiness summary with Gemma, on this device</strong></div><p class="dim">A short note for your leadership from the reading above: where you stand for ${esc(C.CLASSES[m.cls])}, the first gaps to close, and what the FedRAMP rules add. Written by Gemma 4 running in this browser from the computed result; nothing leaves your machine. ${gemmaReady ? '' : 'Loads Gemma first (about 2 GB, once). '}Check it before you send it.</p>
       <div class="row" style="justify-content:flex-start;align-items:center"><button type="button" class="btn cta" id="memo-run">Draft summary</button><button type="button" class="btn" id="memo-stop" hidden>Stop</button><button type="button" class="btn" id="memo-copy" hidden>Copy</button><span id="memo-status" class="dim" role="status" aria-live="polite"></span></div>
       <div id="memo" class="memo" hidden></div></div>` : ''}
     <ul class="exports">${EXPORTS.map(x => `<li><div><strong>${esc(x.name)}</strong> <span class="mono dim">.${x.ext}</span><p class="dim">${esc(x.what)}</p></div><button type="button" class="btn" data-export="${x.id}">Save</button></li>`).join('')}</ul><p id="export-status" class="status" role="status" aria-live="polite"></p>`;
@@ -166,7 +169,7 @@ async function build(id) {
   const m = state.model; const meta = { generated: new Date().toISOString().replace(/\.\d+Z$/, 'Z') };
   const base = `headstart-20x-class-${m.cls}`;
   switch (id) {
-    case 'xlsx': return [`${base}.xlsx`, C.toXlsx(C.workbookSheets(m, meta), zipSync, strToU8)];
+    case 'xlsx': return [`${base}.xlsx`, C.toXlsx(C.workbookSheets(m, meta, interpretations), zipSync, strToU8)];
     case 'workplan': return [`${base}-work-plan.csv`, C.toCsv(C.workplanRows(m))];
     case 'ksi': return [`${base}-indicators.csv`, C.toCsv(C.ksiRows(m))];
     case 'rules': return [`${base}-fedramp-rules.csv`, C.toCsv(C.ruleRows(m))];
@@ -190,7 +193,21 @@ async function save(id, btn) {
   } catch (e) { say(`Could not build that file: ${e.message}`, true); } finally { btn.disabled = false; }
 }
 // ---------- PDF scanner ----------
-let lastScan = null;
+let lastScan = null, lastPages = null, passCtl = null;
+// After a PDF scan with Gemma loaded: read Section 4 again with Gemma and add anything the rules missed.
+async function gemmaSecondPass() {
+  if (!lastScan || !lastPages || !gemmaReady) return;
+  const status = $('scan-status'); passCtl?.abort(); passCtl = new AbortController();
+  try {
+    const body = lastPages.join('\n'); const i = body.search(/(?:section|part)\s*(?:4|IV)\b/i);
+    const extra = await gemmaReadExceptions(i >= 0 ? body.slice(i) : body, passCtl.signal, s => { status.textContent = s; });
+    if (passCtl.signal.aborted) return;
+    const before = lastScan.exceptions.length;
+    lastScan.exceptions = mergeExceptions(lastScan.exceptions, extra);
+    renderFound(lastScan); syncExceptionsFromScan();
+    status.textContent = `Scanned ${lastScan.pages} pages. ${lastScan.exceptions.length} exceptions after Gemma's read (${lastScan.exceptions.length - before} added by Gemma), ${lastScan.cleanCount} clean results. Untick anything that is wrong, then read the report.`;
+  } catch (e) { status.textContent = `Gemma's second read did not finish (${e?.message || 'error'}); the scanner's reading stands.`; }
+}
 async function scanPdf(f) {
   if (!f) return;
   if (!$('empty').hidden || true) $('empty').scrollIntoView?.({ block: 'start' });
@@ -206,6 +223,8 @@ async function scanPdf(f) {
   fillSoc2Form({ reportType: r.reportType, period: r.period, categories: r.categories, exceptions: r.exceptions.filter(e => e.criterion) });
   status.textContent = `Scanned ${r.pages} pages. ${r.exceptions.length} exception${r.exceptions.length === 1 ? '' : 's'}, ${r.cleanCount} clean results, ${r.criteriaTested.length} criteria seen. The form is filled in; untick anything that is wrong, then read the report.`;
   renderFound(r);
+  lastPages = pages;
+  if (gemmaReady) gemmaSecondPass();
   const uncertain = r.exceptions.filter(e => e.confidence !== 'high' && (e.candidates || []).length > 1);
   $('gemma').hidden = !(uncertain.length && hasWebGPU());
   if (uncertain.length && gemmaReady) { runGemma(); }
@@ -247,7 +266,7 @@ function gemmaLoadUi(progressText) {
     top.hidden = !hasWebGPU();
     top.classList.toggle('ready', gemmaReady);
     top.disabled = gemmaReady || gemmaBusy;
-    topText.textContent = gemmaReady ? 'Local AI ready · Gemma 4' : gemmaBusy ? (progressText || 'Loading local AI…') : 'Power up local AI';
+    topText.textContent = gemmaReady ? 'Gemma ready · local, fully in your browser' : gemmaBusy ? (progressText || 'Loading Gemma…') : 'Power up with Gemma';
     top.title = gemmaReady ? 'Gemma 4 is loaded in this browser and reads reports on this device.' : 'Loads Gemma 4 into this browser once (about 2 GB). It then reads reports on this device; nothing leaves your machine.';
   }
 }
@@ -257,7 +276,7 @@ async function loadGemma() {
   const status = $('gemma-load-status');
   gemmaBusy = true; gemmaCtl = new AbortController(); $('gemma-load-stop').hidden = false; gemmaLoadUi();
   const fmt = p => p.kind === 'bytes' && p.total ? `${p.message} ${(p.loaded / 1048576).toFixed(0)} / ${(p.total / 1048576).toFixed(0)} MB` : p.fraction != null ? `${p.message} ${Math.round(p.fraction * 100)}%` : p.message || 'Loading';
-  const short = p => p.kind === 'bytes' && p.total ? `Loading local AI ${Math.round(100 * p.loaded / p.total)}%` : p.fraction != null ? `Loading local AI ${Math.round(p.fraction * 100)}%` : 'Loading local AI…';
+  const short = p => p.kind === 'bytes' && p.total ? `Loading Gemma ${Math.round(100 * p.loaded / p.total)}%` : p.fraction != null ? `Loading Gemma ${Math.round(p.fraction * 100)}%` : 'Loading Gemma…';
   try {
     gemma ??= createGemmaEngine({ onProgress: p => { status.textContent = fmt(p); gemmaLoadUi(short(p)); } });
     status.textContent = 'Starting…';
@@ -301,6 +320,33 @@ async function ensureGemma() {
   await loadGemma();
   return gemmaReady;
 }
+// Gemma reads Section 4 text in chunks and lists exceptions as "CRITERION | text" lines; only valid criteria are kept.
+async function gemmaReadExceptions(body, signal, onStatus) {
+  const seen = new Map();
+  const src = body.length > 200000 ? body.slice(0, 200000) : body;
+  const chunks = []; for (let i = 0; i < src.length; i += 5000) chunks.push(src.slice(Math.max(0, i - 300), i + 5000));
+  for (let i = 0; i < chunks.length; i++) {
+    if (signal.aborted) break;
+    onStatus?.(`Gemma is reading part ${i + 1} of ${chunks.length}…`);
+    const prompt = `Below is text from a SOC 2 report's tests of controls. List every test result that is NOT "no exceptions noted": exceptions, deviations, controls not operating effectively. For each, write one line in the form\nCRITERION | one-sentence description of the exception\nwhere CRITERION is the Trust Services criterion the tested control supports (like CC6.3, CC7.1, A1.2, C1.2). If the text gives only a control number, infer the criterion from the control's subject. If there are none, write NONE. Write nothing else.\n\nTEXT:\n${chunks[i]}`;
+    let out = '';
+    try { out = await gemma.complete(prompt, { maxNewTokens: 300, signal }); } catch (err) { if (signal.aborted) break; throw err; }
+    for (const line of out.split('\n')) {
+      const m = /^\s*[-*•]?\s*(CC\s?\d\.\d|A\s?1\.\d|C\s?1\.\d|PI\s?1\.\d|P\s?\d\.\d)\s*\|\s*(.+?)\s*$/i.exec(line);
+      if (!m) continue;
+      const id = C.normTsc(m[1], tsc); const desc = m[2].replace(/\s+/g, ' ').slice(0, 300);
+      if (!id || /^none$/i.test(desc)) continue;
+      const key = id + '|' + desc.slice(0, 40).toLowerCase();
+      if (!seen.has(key)) seen.set(key, { criterion: id, text: desc, byGemma: true, confidence: 'medium', candidates: [id], snippet: desc, control: '' });
+    }
+  }
+  return [...seen.values()];
+}
+function mergeExceptions(base, extra) {
+  const merged = [...base.filter(e => e.criterion)];
+  for (const g of extra) if (!merged.some(e => e.criterion === g.criterion && e.text.slice(0, 30).toLowerCase() === g.text.slice(0, 30).toLowerCase())) merged.push(g);
+  return merged;
+}
 let aiCtl = null;
 async function aiExtract() {
   const text = $('ai-text').value.trim(); const status = $('ai-status'); const found = $('ai-found');
@@ -315,34 +361,49 @@ async function aiExtract() {
     status.textContent = 'Loading Gemma…';
     if (!(await ensureGemma())) { status.textContent = 'Gemma is not available in this browser; the scanner\'s reading is in the form above.'; renderFound(r); found.hidden = false; return; }
     aiCtl = new AbortController();
-    // Gemma reads Section 4 in chunks and lists exceptions as "CRITERION | text" lines; only valid criteria are kept
-    const body = text.length > 200000 ? text.slice(0, 200000) : text;
-    const chunks = []; for (let i = 0; i < body.length; i += 5000) chunks.push(body.slice(Math.max(0, i - 300), i + 5000));
-    const seen = new Map();
-    for (let i = 0; i < chunks.length; i++) {
-      if (aiCtl.signal.aborted) break;
-      status.textContent = `Gemma is reading part ${i + 1} of ${chunks.length}…`;
-      const prompt = `Below is text from a SOC 2 report's tests of controls. List every test result that is NOT "no exceptions noted": exceptions, deviations, controls not operating effectively. For each, write one line in the form\nCRITERION | one-sentence description of the exception\nwhere CRITERION is the Trust Services criterion the tested control supports (like CC6.3, CC7.1, A1.2, C1.2). If the text gives only a control number, infer the criterion from the control's subject. If there are none, write NONE. Write nothing else.\n\nTEXT:\n${chunks[i]}`;
-      let out = '';
-      try { out = await gemma.complete(prompt, { maxNewTokens: 300, signal: aiCtl.signal }); } catch (err) { if (aiCtl.signal.aborted) break; throw err; }
-      for (const line of out.split('\n')) {
-        const m = /^\s*[-*•]?\s*(CC\s?\d\.\d|A\s?1\.\d|C\s?1\.\d|PI\s?1\.\d|P\s?\d\.\d)\s*\|\s*(.+?)\s*$/i.exec(line);
-        if (!m) continue;
-        const id = C.normTsc(m[1], tsc); const desc = m[2].replace(/\s+/g, ' ').slice(0, 300);
-        if (!id || /^none$/i.test(desc)) continue;
-        const key = id + '|' + desc.slice(0, 40).toLowerCase();
-        if (!seen.has(key)) seen.set(key, { criterion: id, text: desc, byGemma: true, confidence: 'medium', candidates: [id], snippet: desc, control: '' });
-      }
-    }
-    // merge: rule-placed exceptions keep priority; Gemma adds the rest
-    const merged = [...r.exceptions.filter(e => e.criterion)];
-    for (const g of seen.values()) if (!merged.some(e => e.criterion === g.criterion && e.text.slice(0, 30).toLowerCase() === g.text.slice(0, 30).toLowerCase())) merged.push(g);
+    const extra = await gemmaReadExceptions(text, aiCtl.signal, s => { status.textContent = s; });
+    const seen = extra; const merged = mergeExceptions(r.exceptions, extra);
     r.exceptions = merged; lastScan = r;
     fillSoc2Form({ reportType: r.reportType, period: r.period, categories: r.categories, exceptions: merged });
     renderFound(r); found.hidden = false;
-    status.textContent = aiCtl.signal.aborted ? 'Stopped.' : `Done. ${merged.length} exception${merged.length === 1 ? '' : 's'} in the form above (${seen.size} read by Gemma). Check them, then read the report.`;
+    status.textContent = aiCtl.signal.aborted ? 'Stopped.' : `Done. ${merged.length} exception${merged.length === 1 ? '' : 's'} in the form above (${seen.length} read by Gemma). Check them, then read the report.`;
   } catch (e) { status.textContent = `Gemma could not read that (${e?.message || 'unknown error'}).`; }
   finally { run.disabled = false; stop.hidden = true; aiCtl = null; }
+}
+const interpretations = new Map(); // ksi id -> text
+function ksiPrompt(k, m) {
+  const have = k.links.filter(l => l.covered).map(l => `${l.id} ${l.title}`); const miss = k.links.filter(l => !l.covered).map(l => `${l.id} ${l.title} (${statusWord(l)})`);
+  return `You are a FedRAMP 20x advisor. In about 150 words of plain prose (no headings, no bullets, no percentages), tell a cloud provider's security lead where they stand on this Key Security Indicator and what to do first. Be concrete and do not invent facts.\n\nINDICATOR ${k.id} ${k.name}: ${k.statement}\nREADING FROM THEIR ${m.source === 'soc2' ? 'SOC 2 REPORT' : 'ISO 27001 SOA'}: ${m.states[k.state].label}. ${m.states[k.state].long}\nIN PLACE: ${have.join('; ') || 'nothing related'}\nMISSING OR WEAK: ${miss.join('; ') || 'nothing'}\nWHAT 20X ADDS BEYOND ${m.source === 'soc2' ? 'SOC 2' : 'ISO 27001'}: ${k.adds}`;
+}
+async function interpretKsi(id, box, btn) {
+  const m = state.model; const k = m.ksis.find(x => x.id === id); if (!k || !box) return;
+  if (interpretations.has(id)) { box.hidden = false; box.textContent = interpretations.get(id); return; }
+  btn && (btn.disabled = true); box.hidden = false; box.textContent = gemmaReady ? 'Thinking…' : 'Loading Gemma…';
+  try {
+    if (!(await ensureGemma())) { box.textContent = 'Gemma is not available in this browser.'; return; }
+    const ctl = new AbortController(); interpretCtls.set(id, ctl);
+    const text = (await gemma.complete(ksiPrompt(k, m), { maxNewTokens: 320, signal: ctl.signal, onText: t => { box.textContent = t; } })).trim();
+    interpretations.set(id, text); box.textContent = text;
+  } catch (e) { box.textContent = `Gemma could not interpret this (${e?.message || 'error'}).`; }
+  finally { btn && (btn.disabled = false); interpretCtls.delete(id); }
+}
+const interpretCtls = new Map();
+let allCtl = null;
+async function interpretAll() {
+  const m = state.model; const status = $('all-status'), run = $('all-run'), stop = $('all-stop');
+  run.disabled = true; stop.hidden = false; allCtl = new AbortController();
+  try {
+    if (!(await ensureGemma())) { status.textContent = 'Gemma is not available in this browser.'; return; }
+    const todo = m.ksis.filter(k => !k.optional && k.state !== 'head' && !interpretations.has(k.id));
+    let n = 0;
+    for (const k of todo) {
+      if (allCtl.signal.aborted) break;
+      status.textContent = `Interpreting ${k.id} (${++n} of ${todo.length})…`;
+      try { const text = (await gemma.complete(ksiPrompt(k, m), { maxNewTokens: 320, signal: allCtl.signal })).trim(); if (text) interpretations.set(k.id, text); } catch (e) { if (allCtl.signal.aborted) break; }
+      const open = document.querySelector(`details.ctl[data-id="${k.id}"] .interp`); if (open) { open.hidden = false; open.textContent = interpretations.get(k.id) || ''; }
+    }
+    status.textContent = allCtl.signal.aborted ? `Stopped after ${n} indicators; notes so far are kept.` : `Done. ${interpretations.size} indicators interpreted; the notes are in the Indicators tab and the workbook export.`;
+  } finally { run.disabled = false; stop.hidden = true; allCtl = null; }
 }
 let memoCtl = null;
 async function aiMemo() {
@@ -379,7 +440,7 @@ function setTab(t, fromHash) {
 
 // ---------- events ----------
 document.addEventListener('click', e => {
-  const t = e.target.closest('[data-tab],[data-state],[data-export],#open,#clear,[data-open],[data-sample],[data-src],#use-paste,#ai-run,#ai-stop,#memo-run,#memo-stop,#memo-copy,#pdf-open,#gemma-run,#gemma-stop,#gemma-load-btn,#gemma-load-stop,#gemma-top');
+  const t = e.target.closest('[data-tab],[data-state],[data-export],#open,#clear,[data-open],[data-sample],[data-src],#use-paste,#ai-run,#ai-stop,#memo-run,#memo-stop,#memo-copy,#pdf-open,#gemma-run,#gemma-stop,#gemma-load-btn,#gemma-load-stop,#gemma-top,[data-interpret],#all-run,#all-stop');
   if (!t) return;
   if (t.dataset.tab) setTab(t.dataset.tab);
   else if (t.dataset.state) { const s = t.dataset.state; state.states.has(s) ? state.states.delete(s) : state.states.add(s); renderCoverage(); if (state.tab !== 'indicators') setTab('indicators'); else renderIndicators(); }
@@ -399,6 +460,9 @@ document.addEventListener('click', e => {
   else if (t.id === 'gemma-run') runGemma();
   else if (t.id === 'gemma-stop' || t.id === 'gemma-load-stop') gemmaCtl?.abort();
   else if (t.id === 'gemma-load-btn' || t.id === 'gemma-top') loadGemma();
+  else if (t.dataset.interpret) interpretKsi(t.dataset.interpret, t.parentElement.querySelector('.interp'), t);
+  else if (t.id === 'all-run') interpretAll();
+  else if (t.id === 'all-stop') allCtl?.abort();
 });
 document.addEventListener('toggle', e => {
   const d = e.target; if (!d.classList?.contains('ctl') || !d.open) return;
