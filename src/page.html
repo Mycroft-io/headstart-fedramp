@@ -215,6 +215,8 @@ body.dragging::after { content: "Drop package files to load them"; position: fix
 .scan { width: 100%; text-align: left; display: grid; gap: 10px; border: 1px solid var(--line); border-radius: var(--r); padding: 14px 16px; background: var(--surface); }
 .found-meta { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 13.5px; } .found-meta span b { font-weight: 600; color: var(--ink); }
 .conf { font: 600 10.5px/1 var(--display); letter-spacing: .05em; text-transform: uppercase; padding: 4px 6px; border-radius: 4px; } .conf-high { background: var(--traced-bg); color: var(--traced); } .conf-medium { background: var(--attention-bg); color: var(--attention); } .conf-low { background: var(--bad-bg); color: var(--bad); }
+.gemma-load { display: grid; gap: 8px; font-size: 13.5px; padding: 12px 14px; border-radius: var(--r); background: var(--sunk); } .gemma-load .spark { color: var(--traced); }
+.found-facts { grid-template-columns: 200px minmax(0, 1fr); font-size: 13.5px; } .crit summary { cursor: pointer; font-size: 13px; }
 .gemma-tag { font: 600 10.5px/1 var(--display); letter-spacing: .05em; text-transform: uppercase; padding: 4px 6px; border-radius: 4px; background: var(--silent-bg); color: var(--silent); margin-left: 6px; }
 .found li.pick { grid-template-columns: 22px 60px minmax(0, 1fr) auto; } .found li input { margin: 0; align-self: start; margin-top: 3px; }
 .ai { width: 100%; text-align: left; display: grid; gap: 10px; border: 1px solid var(--line); border-radius: var(--r); padding: 14px 16px; background: linear-gradient(180deg, var(--mint-soft), var(--surface) 70%); }
@@ -279,6 +281,10 @@ body.dragging::after { content: "Drop package files to load them"; position: fix
           <input id="pdf" type="file" accept=".pdf,application/pdf" hidden>
           <div class="row" style="justify-content:flex-start;align-items:center"><button type="button" class="btn cta" id="pdf-open">Choose a PDF</button><span id="scan-status" class="dim" role="status" aria-live="polite"></span></div>
           <div id="scan-found" hidden></div>
+          <div id="gemma-load" class="gemma-load" hidden>
+            <div><strong><span class="spark" aria-hidden="true">✦</span> Powered by Gemma.</strong> <span class="dim">Load Gemma 4 on this device once, and it reviews any exception the scanner cannot place. About 2 GB from Hugging Face, kept in your browser cache; nothing you scan ever leaves this machine.</span></div>
+            <div class="row" style="justify-content:flex-start;align-items:center"><button type="button" class="btn" id="gemma-load-btn">Load Gemma on this device</button><button type="button" class="btn" id="gemma-load-stop" hidden>Stop</button><span id="gemma-load-status" class="dim" role="status" aria-live="polite"></span></div>
+          </div>
           <div id="gemma" class="ai" hidden>
             <div class="ai-head"><span class="spark" aria-hidden="true">✦</span><strong>Resolve the uncertain ones with Gemma, on this device</strong></div>
             <p class="dim" id="gemma-why"></p>

@@ -52,6 +52,28 @@ export function scanReport(pages) {
   const so = /(?:report\s+on|description\s+of)\s+([A-Z][\w&.,'\- ]{2,60}?)(?:'s|’s)\s+(?:description|system|controls|hosting|platform)/i.exec(head) || /^([A-Z][\w&.,'\- ]{2,60}?)\s*\n[^\n]*SOC\s*2/m.exec(head);
   if (so) serviceOrganization = norm(so[1]);
 
+  // auditor: "<Firm> LLP/LLC/P.C./Inc." near "independent service auditor", else first firm-like name
+  let auditor = '';
+  const audWin = (/independent\s+service\s+auditor[\s\S]{0,1500}/i.exec(head) || [''])[0] + '\n' + head.slice(0, 1500);
+  const firm = /\b((?:[A-Z][\w&'.\-]*\s){1,5}(?:LLP|LLC|L\.L\.P\.|P\.C\.|PLLC|CPAs?|Associates))\b/.exec(audWin.replace(/\b(?:Independent|Service|Auditor'?s?|Report|Prepared|by|The)\b\s*/g, ''));
+  if (firm && !new RegExp(firm[1].replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i').test(serviceOrganization)) auditor = norm(firm[1]);
+  // system described: "description of its <X> system" / "the <X> System"
+  let system = '';
+  const sys = /(?:description\s+of\s+(?:its|the)|(?:'s|’s))\s+((?:[A-Z][\w&.'\-/]*\s){1,6})(?:system|platform)\b/i.exec(head);
+  if (sys) system = norm(sys[1]).replace(/^(?:Description\s+of\s+)?(?:Its|The)\s+/i, '').replace(/\s+(?:and|of|the)$/i, '');
+  // subservice organizations (carve-outs): names within 300 chars of "subservice organization"
+  const subservice = new Set();
+  for (const m2 of text.matchAll(/[^.]{0,300}subservice\s+organi[sz]ations?[^.]{0,300}/gi)) {
+    for (const n of m2[0].matchAll(/\b(Amazon Web Services|AWS|Microsoft Azure|Azure|Google Cloud(?: Platform)?|GCP|Oracle Cloud|IBM Cloud|Cloudflare|Datadog|Okta|Auth0|Salesforce|Snowflake|Databricks|GitHub|GitLab|Atlassian|Twilio|Stripe|Equinix|Digital Realty|Rackspace|Heroku|Vercel|Fastly|Akamai|MongoDB Atlas|Zendesk|Workday|Slack|Zoom)\b/g)) subservice.add(n[1].replace(/^Amazon Web Services$/, 'AWS').replace(/^Microsoft Azure$/, 'Azure').replace(/^Google Cloud Platform$/, 'Google Cloud'));
+  }
+  const carveOut = /carve[-\s]?out/i.test(text) ? 'carve-out' : /inclusive\s+method/i.test(text) ? 'inclusive' : '';
+  // complementary user entity controls: count of CUEC items
+  const cuecSec = /complementary\s+user\s+entity\s+controls?[\s\S]{0,6000}/i.exec(text);
+  let cuecCount = 0;
+  if (cuecSec) { const lines = cuecSec[0].split('\n').slice(1); cuecCount = lines.filter(l => /^\s*(?:[-•▪◦*]|\d{1,2}[.)]|CUEC[-\s]?\d+|[a-z][.)])\s+\S/i.test(l)).length; }
+  // locations: "located in <City, ST>" style mentions in the description
+  const locations = [...new Set([...text.matchAll(/\b(?:located|headquartered|offices?)\s+in\s+([A-Z][a-zA-Z.\- ]{2,30},\s?(?:[A-Z]{2}|[A-Z][a-z]+))\b/g)].map(x => x[1]))].slice(0, 6);
+
   // Section 4 region: from the heading onward, else whole text
   const s4 = /(?:section|part)\s*(?:4|IV)\b[^\n]{0,120}(?:tests?\s+of\s+controls|controls?,?\s+tests?|results)/i.exec(text) || /tests?\s+of\s+(?:operating\s+effectiveness|controls)\s+and\s+results/i.exec(text);
   const body = s4 ? text.slice(s4.index) : text;
@@ -103,9 +125,12 @@ export function scanReport(pages) {
     if (h.meaning === 'clean') { cleanCount++; continue; }
     if (h.meaning === 'not-tested') continue;
     // the exception text: this sentence, plus the next one when this one is just the verdict
-    const sentences = fwd.split(/(?<=[.!?])\s+(?=[A-Z])|\n/);
+    // wrapped table cells put newlines inside a sentence, so split on sentence ends only, and stop at the next row's control token
+    const fwdFlat = fwd.replace(/\n+/g, ' ');
+    const sentences = fwdFlat.split(/(?<=[.!?])\s+(?=[A-Z])/);
     let text = sentences[0] || ''; if (text.length < 40 && sentences[1]) text += ' ' + sentences[1];
-    const nextId = fwd.search(CRITERION_RE); if (nextId > 0 && nextId < text.length) text = text.slice(0, nextId);
+    const nextId = fwdFlat.search(CRITERION_RE); if (nextId > 0 && nextId < text.length) text = text.slice(0, nextId);
+    const nextCtl = text.slice(1).search(/\s[A-Z]{1,6}-\d{1,3}\b\s+[A-Z]/); if (nextCtl > 20) text = text.slice(0, nextCtl + 1);
     const ctl = ctlTok.length ? ctlTok[ctlTok.length - 1] : '';
     const confidence = !criterion ? 'low' : via === 'map' ? 'high' : stale ? 'low' : dist < 300 ? 'high' : dist < 700 ? 'medium' : 'low';
     text = norm(text).replace(/^(?:exceptions?|deviations?)\s+(?:were\s+)?(?:noted|identified|found|observed)\s*[:.\-–—]?\s*/i, '').replace(/^result\s*:\s*/i, '');
@@ -122,8 +147,10 @@ export function scanReport(pages) {
   if (!cleanCount && !merged.length) notes.push('No test result phrases ("no exceptions noted", "exception noted") were found. This may not be a SOC 2 report, or the PDF text may not be extractable (scanned image).');
   if (merged.some(e => e.confidence !== 'high')) notes.push('Some exceptions could not be tied confidently to a criterion. Check the ones marked medium or low before reading the report.');
 
+  const criteriaInReport = [...presentIds].sort();
   return {
-    reportType, period, typeConf, categories: [...categories], catConf, serviceOrganization,
+    reportType, period, typeConf, categories: [...categories], catConf, serviceOrganization, auditor, system,
+    subservice: [...subservice], carveOut, cuecCount, locations, criteriaInReport,
     exceptions: merged, criteriaTested, cleanCount, notes, pages: pages.length, chars: text.length,
     section4Found: !!s4,
   };

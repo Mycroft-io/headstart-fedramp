@@ -209,13 +209,24 @@ async function scanPdf(f) {
   renderFound(r);
   const uncertain = r.exceptions.filter(e => e.confidence !== 'high' && (e.candidates || []).length > 1);
   $('gemma').hidden = !(uncertain.length && hasWebGPU());
+  if (uncertain.length && gemmaReady) { runGemma(); }
   if (uncertain.length && hasWebGPU()) { $('gemma-why').textContent = `${uncertain.length} exception${uncertain.length === 1 ? '' : 's'} could belong to more than one criterion. Gemma reads each snippet and picks among the nearby criteria; its picks are marked and you can still untick them.`; $('gemma-note').textContent = DOWNLOAD_NOTE; $('gemma-status').textContent = ''; }
 }
 function renderFound(r) {
   const found = $('scan-found');
   const conf = c => `<span class="conf conf-${c}">${c}</span>`;
   found.hidden = false;
-  found.innerHTML = `<div class="found-meta">${r.serviceOrganization ? `<span>Organization <b>${esc(r.serviceOrganization)}</b></span>` : ''}<span>Type <b>${esc(r.reportType)}</b> ${conf(r.typeConf)}</span>${r.period ? `<span>Period <b>${esc(r.period)}</b></span>` : ''}<span>Scope <b>${r.categories.map(c => esc(tsc.categories[c] || c)).join(', ')}</b> ${conf(r.catConf)}</span></div>
+  const meta = [
+    r.serviceOrganization && ['Organization', esc(r.serviceOrganization)], r.system && ['System', esc(r.system)], r.auditor && ['Auditor', esc(r.auditor)],
+    ['Report', `${esc(r.reportType)} ${conf(r.typeConf)}`], r.period && ['Period', esc(r.period)],
+    ['Categories in scope', `${r.categories.map(c => esc(tsc.categories[c] || c)).join(', ')} ${conf(r.catConf)}`],
+    ['Criteria referenced', `${r.criteriaInReport.length}${r.criteriaTested.length ? ` (${r.criteriaTested.length} with test results)` : ''}`],
+    (r.subservice.length || r.carveOut) && ['Subservice organizations', `${r.subservice.map(esc).join(', ') || 'named in the report'}${r.carveOut ? `, ${esc(r.carveOut)} method` : ''} <span class="dim">(declare these as third-party resources in 20x)</span>`],
+    r.cuecCount && ['Complementary user entity controls', `${r.cuecCount} listed`],
+    r.locations.length && ['Locations', r.locations.map(esc).join('; ')],
+  ].filter(Boolean);
+  found.innerHTML = `<dl class="facts found-facts">${meta.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('')}</dl>
+    ${r.criteriaInReport.length ? `<details class="crit"><summary class="dim">Criteria referenced in the report</summary><p class="mono" style="font-size:12.5px;line-height:1.8">${r.criteriaInReport.map(id => `<span class="${r.criteriaTested.includes(id) ? '' : 'dim'}" title="${esc(tsc.criteria[id] || '')}">${esc(id)}</span>`).join(' · ')}</p></details>` : ''}
     ${r.notes.map(n => `<p class="warn" style="font-size:13px">${esc(n)}</p>`).join('')}
     ${r.exceptions.length ? `<ul class="found">${r.exceptions.map((e, i) => `<li class="pick"><input type="checkbox" id="exc-${i}" data-exc="${i}" ${e.criterion ? 'checked' : ''} aria-label="Include this exception"><label for="exc-${i}" class="mono">${esc(e.criterion || '?')}</label><span><label for="exc-${i}">${esc(e.text)}</label>${e.control ? ` <span class="dim">(${esc(e.control)})</span>` : ''}${e.byGemma ? '<span class="gemma-tag">Gemma</span>' : ''}${e.confidence !== 'high' && !e.byGemma ? `<div class="dim" style="font-size:12.5px">Context: ${esc(e.snippet.slice(0, 220))}</div>` : ''}</span>${conf(e.confidence)}</li>`).join('')}</ul>` : '<p class="dim" style="font-size:13px">No exceptions found.</p>'}`;
 }
@@ -226,7 +237,25 @@ function syncExceptionsFromScan() {
 }
 
 // ---------- Gemma on-device ----------
-let gemma = null, gemmaCtl = null;
+let gemma = null, gemmaCtl = null, gemmaReady = false;
+function gemmaLoadUi() {
+  const box = $('gemma-load'); if (!box) return;
+  box.hidden = !hasWebGPU();
+  $('gemma-load-btn').textContent = gemmaReady ? 'Gemma is loaded on this device' : 'Load Gemma on this device';
+  $('gemma-load-btn').disabled = gemmaReady;
+}
+async function loadGemma() {
+  const status = $('gemma-load-status'), btn = $('gemma-load-btn');
+  btn.disabled = true; gemmaCtl = new AbortController(); $('gemma-load-stop').hidden = false;
+  const fmt = p => p.kind === 'bytes' && p.total ? `${p.message} ${(p.loaded / 1048576).toFixed(0)} / ${(p.total / 1048576).toFixed(0)} MB` : p.fraction != null ? `${p.message} ${Math.round(p.fraction * 100)}%` : p.message || 'Loading';
+  try {
+    gemma ??= createGemmaEngine({ onProgress: p => { status.textContent = fmt(p); } });
+    status.textContent = 'Starting…';
+    gemmaReady = await gemma.ready(gemmaCtl.signal);
+    status.textContent = gemmaReady ? 'Ready. Gemma runs on this device; it will review uncertain exceptions after each scan.' : 'WebGPU is not available in this browser.';
+  } catch (err) { status.textContent = gemmaCtl.signal.aborted ? 'Stopped.' : /fetch|network|download|Failed/i.test(String(err?.message)) ? 'Could not download the runtime or model. Check the connection and try again.' : `Gemma could not load here (${err?.message || 'unknown error'}).`; }
+  finally { $('gemma-load-stop').hidden = true; gemmaCtl = null; gemmaLoadUi(); }
+}
 async function runGemma() {
   if (!lastScan) return;
   const status = $('gemma-status'), run = $('gemma-run'), stop = $('gemma-stop');
@@ -235,7 +264,7 @@ async function runGemma() {
   try {
     gemma ??= createGemmaEngine({ onProgress: p => { status.textContent = fmt(p); } });
     status.textContent = 'Starting…';
-    const ok = await gemma.ready(gemmaCtl.signal);
+    const ok = await gemma.ready(gemmaCtl.signal); gemmaReady = ok; gemmaLoadUi();
     if (!ok) { status.textContent = 'WebGPU is not available in this browser.'; return; }
     const todo = lastScan.exceptions.filter(e => e.confidence !== 'high' && (e.candidates || []).length > 1);
     let n = 0, changed = 0;
@@ -344,7 +373,7 @@ function setTab(t, fromHash) {
 
 // ---------- events ----------
 document.addEventListener('click', e => {
-  const t = e.target.closest('[data-tab],[data-state],[data-export],#open,#clear,[data-open],[data-sample],[data-src],#use-paste,#ai-run,#ai-stop,#memo-run,#memo-stop,#memo-copy,#pdf-open,#gemma-run,#gemma-stop');
+  const t = e.target.closest('[data-tab],[data-state],[data-export],#open,#clear,[data-open],[data-sample],[data-src],#use-paste,#ai-run,#ai-stop,#memo-run,#memo-stop,#memo-copy,#pdf-open,#gemma-run,#gemma-stop,#gemma-load-btn,#gemma-load-stop');
   if (!t) return;
   if (t.dataset.tab) setTab(t.dataset.tab);
   else if (t.dataset.state) { const s = t.dataset.state; state.states.has(s) ? state.states.delete(s) : state.states.add(s); renderCoverage(); if (state.tab !== 'indicators') setTab('indicators'); else renderIndicators(); }
@@ -362,7 +391,8 @@ document.addEventListener('click', e => {
   else if (t.id === 'memo-copy') copyMemo(t);
   else if (t.id === 'pdf-open') $('pdf').click();
   else if (t.id === 'gemma-run') runGemma();
-  else if (t.id === 'gemma-stop') gemmaCtl?.abort();
+  else if (t.id === 'gemma-stop' || t.id === 'gemma-load-stop') gemmaCtl?.abort();
+  else if (t.id === 'gemma-load-btn') loadGemma();
 });
 document.addEventListener('toggle', e => {
   const d = e.target; if (!d.classList?.contains('ctl') || !d.open) return;
@@ -390,5 +420,6 @@ function sampleScan() { const bytes = Uint8Array.from(atob(sample.pdf), c => c.c
 addEventListener('hashchange', () => { if (location.hash === '#sample') loadSample('iso'); else if (location.hash === '#sample-soc2') loadSample('soc2'); else if (location.hash === '#sample-scan') sampleScan(); else setTab(location.hash.slice(1), true); });
 
 $('rules-version').textContent = data.rulesVersion;
+gemmaLoadUi();
 state.tab = TABS.includes(location.hash.slice(1)) ? location.hash.slice(1) : 'indicators';
 if (location.hash === '#sample') loadSample('iso'); else if (location.hash === '#sample-soc2') loadSample('soc2'); else { refresh(); if (location.hash === '#sample-scan') sampleScan(); }

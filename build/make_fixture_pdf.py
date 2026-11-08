@@ -10,6 +10,9 @@ def report_a(path):
     f += [P("Northwind Analytics Ltd.", 'Title'), P("SOC 2 Type 2 Report", 'Heading2'),
           P("Report on Northwind Analytics Ltd.'s Description of Its Analytics Platform System and on the Suitability of the Design and Operating Effectiveness of Its Controls Relevant to Security and Availability throughout the period July 1, 2025 to June 30, 2026."),
           Spacer(1, 12), P("Section 1: Independent Service Auditor's Report", 'Heading2'),
+          P("Prepared by Contoso Assurance LLP, independent service auditor. Northwind's Analytics Platform System is hosted on Amazon Web Services (AWS), a subservice organization presented using the carve-out method. Northwind is located in Toronto, ON."),
+          P("Complementary User Entity Controls", 'Heading3'),
+          P("1. User entities are responsible for provisioning and deprovisioning their own users."), P("2. User entities are responsible for configuring MFA for their users."), P("3. User entities are responsible for classifying the data they upload."),
           P("In our opinion, in all material respects, the controls stated in the description were suitably designed and operated effectively to provide reasonable assurance that the service commitments and system requirements were achieved based on the applicable trust services criteria relevant to security and availability (applicable trust services criteria) set forth in TSP section 100."),
           PageBreak(), P("Section 4: Trust Services Criteria, Related Controls, and Tests of Controls and Results", 'Heading2')]
     rows = [["Criteria", "Control #", "Control Activity", "Test Performed", "Results"],

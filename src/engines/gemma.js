@@ -5,7 +5,7 @@
 export const RUNTIME_URL = 'https://huggingface.co/spaces/webml-community/gemma-4-webgpu-kernels/resolve/main/gemma-4-e2b.js';
 export const MODEL_ID = 'google/gemma-4-E2B-it-qat-mobile-transformers';
 export const GEMMA_TERMS = 'https://ai.google.dev/gemma/terms';
-export const DOWNLOAD_NOTE = 'About 1.5 GB, downloaded once from Hugging Face and kept in your browser cache. Needs WebGPU (Chrome or Edge) and a machine with a GPU or 16 GB of memory.';
+export const DOWNLOAD_NOTE = 'About 2 GB, downloaded once from Hugging Face and kept in your browser cache. Needs WebGPU (Chrome or Edge) and a machine with a GPU or 16 GB of memory.';
 
 export function hasWebGPU() { return typeof navigator !== 'undefined' && 'gpu' in navigator; }
 

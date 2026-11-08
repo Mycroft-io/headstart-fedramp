@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.2.0 (2026-11-08)
+
+- Scanner reads the front of the report too: auditor, system described, subservice organizations and carve-out method, complementary user entity controls, locations, and every criterion referenced.
+- "Load Gemma on this device" button to fetch the model ahead of time; once loaded, Gemma reviews uncertain exceptions automatically after each scan. Verified end to end in a browser: runtime import, download, inference.
+- Fixes: runtime imported from a blob (Hugging Face serves it as text/plain); wrapped table-cell sentences kept whole; an unmapped control no longer borrows the previous row's criterion.
+
 ## 1.1.0 (2026-11-08)
 
 - SOC 2 PDF scanner: drop the report, pdf.js reads it in the browser, and a rules-based scanner fills the form with type, period, scope and every Section 4 exception, each with a confidence mark. Reads criteria-to-control mapping tables for reports that list results by control number.

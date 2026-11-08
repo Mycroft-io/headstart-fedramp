@@ -6,7 +6,7 @@ A single web page that reads an ISO/IEC 27001:2022 Statement of Applicability or
 
 It runs entirely in the browser. Nothing is uploaded, the page makes no network requests, and `dist/index.html` works when opened from disk. The copy published inside claude.ai adds two optional steps that ask Claude, on the viewer's own account and with their consent: reading a SOC 2 report's Section 4 into the form, and drafting a one-page readiness note from the result. The public site has neither and never contacts a model.
 
-**Version 1.1.** Live at [mycroft-io.github.io/headstart-fedramp](https://mycroft-io.github.io/headstart-fedramp/). Built and maintained by [Mycroft](https://mycroft.io). Not a FedRAMP tool and not endorsed by FedRAMP. The mapping is Mycroft's own work and is open to review.
+**Version 1.2.** Live at [mycroft-io.github.io/headstart-fedramp](https://mycroft-io.github.io/headstart-fedramp/). Built and maintained by [Mycroft](https://mycroft.io). Not a FedRAMP tool and not endorsed by FedRAMP. The mapping is Mycroft's own work and is open to review.
 
 Sibling project: [Crosswalk 20x](https://github.com/Mycroft-io/crosswalk-rev5-to-20x) reads a finished 20x package for agency reviewers.
 
@@ -60,7 +60,7 @@ When a report lists results by control number with the criteria mapping in a sep
 
 ### On-device Gemma step
 
-When exceptions remain that could belong to more than one criterion, and the browser has WebGPU, the page offers to resolve them with **Gemma 4 E2B running on the device**. It loads the WebGPU runtime published by the Hugging Face webml community ([gemma-4-webgpu-kernels](https://huggingface.co/spaces/webml-community/gemma-4-webgpu-kernels)) and Google's `gemma-4-E2B-it-qat-mobile-transformers` weights, about 1.5 GB, downloaded once and cached by the browser. Gemma is asked one bounded question per exception (which of these nearby criteria does the tested control support) and its answer is only accepted if it is one of the options. Picks are marked in the list and the reader can still untick them. Nothing else leaves the machine; this is the only step that makes any network request, and only when the reader clicks it.
+When exceptions remain that could belong to more than one criterion, and the browser has WebGPU, the page offers to resolve them with **Gemma 4 E2B running on the device**. It loads the WebGPU runtime published by the Hugging Face webml community ([gemma-4-webgpu-kernels](https://huggingface.co/spaces/webml-community/gemma-4-webgpu-kernels)) and Google's `gemma-4-E2B-it-qat-mobile-transformers` weights, about 2 GB, downloaded once and cached by the browser. Gemma is asked one bounded question per exception (which of these nearby criteria does the tested control support) and its answer is only accepted if it is one of the options. Picks are marked in the list and the reader can still untick them. Nothing else leaves the machine; this is the only step that makes any network request, and only when the reader clicks it.
 
 Gemma is provided under and subject to the [Gemma Terms of Use](https://ai.google.dev/gemma/terms). The runtime is loaded from Hugging Face at run time and is not redistributed in this repository.
 
