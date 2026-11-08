@@ -316,11 +316,11 @@ body.dragging::after { content: "Drop package files to load them"; position: fix
           <div class="row" style="justify-content:flex-start"><button type="submit" class="btn cta">Read my report</button><button type="button" class="btn" data-sample="soc2">Or view a sample report</button></div>
         </form>
         <div id="ai-extract" class="ai" hidden>
-          <div class="ai-head"><span class="spark" aria-hidden="true">✦</span><strong>Let Claude read Section 4 for you</strong></div>
-          <p class="dim">Paste the text of the report's control matrix (Section 4, or the whole report). Claude fills in the report type, period, categories and exceptions above, and lists what it found so you can check it. The text goes to Claude on your own account, after you allow it, and nowhere else.</p>
+          <div class="ai-head"><span class="spark" aria-hidden="true">✦</span><strong>No PDF? Paste the text and let Gemma read it</strong></div>
+          <p class="dim">Paste Section 4 (or the whole report). The scanner picks out the report type, period and scope, and Gemma 4 reads the test results on this device and fills in the exceptions above, listing what it found so you can check it. Nothing leaves your machine.</p>
           <label class="sr" for="ai-text">Report text</label>
           <textarea id="ai-text" class="pasted" placeholder="Paste the report text here"></textarea>
-          <div class="row" style="justify-content:flex-start;align-items:center"><button type="button" class="btn cta" id="ai-run">Read with Claude</button><button type="button" class="btn" id="ai-stop" hidden>Stop</button><span id="ai-status" class="dim" role="status" aria-live="polite"></span></div>
+          <div class="row" style="justify-content:flex-start;align-items:center"><button type="button" class="btn cta" id="ai-run">Read with Gemma</button><button type="button" class="btn" id="ai-stop" hidden>Stop</button><span id="ai-status" class="dim" role="status" aria-live="polite"></span></div>
           <div id="ai-found" hidden></div>
         </div>
       </div>

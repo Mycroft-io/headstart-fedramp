@@ -46,6 +46,17 @@ export function createGemmaEngine({ runtimeUrl = RUNTIME_URL, onProgress = () =>
     const text = String(out || '').replace(/<[^>]+>/g, ' ').trim();
     return options.find(o => text.includes(o)) || options.find(o => text.includes(o.split(' ')[0])) || null;
   }
+  // Free-form generation with streaming. Returns the full text.
+  async function complete(prompt, { maxNewTokens = 400, signal, onText } = {}) {
+    if (!model) throw new Error('engine not ready');
+    model.reset?.();
+    let text = '';
+    for await (const step of model.generate([{ role: 'user', content: prompt }], { maxNewTokens, signal })) {
+      text = step.text; onText?.(text);
+      if (signal?.aborted) break;
+    }
+    return text;
+  }
   function dispose() { try { model?.dispose?.(); } catch { /* fine */ } model = null; loading = null; }
-  return { name: 'Gemma 4 E2B', credit: 'Gemma 4 E2B by Google, running on-device via WebGPU kernels by the Hugging Face webml community', ready, choose, dispose };
+  return { name: 'Gemma 4 E2B', complete, credit: 'Gemma 4 E2B by Google, running on-device via WebGPU kernels by the Hugging Face webml community', ready, choose, dispose };
 }

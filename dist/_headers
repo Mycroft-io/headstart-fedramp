@@ -1,5 +1,5 @@
 /*
-  Content-Security-Policy: default-src 'none'; script-src 'sha256-u3v9WCT+GdTCm86MXpLPFXv7+QbYHlWOZmQpRpUY1OI=' https://huggingface.co blob:; worker-src blob:; connect-src https://huggingface.co https://*.huggingface.co https://*.hf.co; style-src 'unsafe-inline'; img-src data:; font-src data:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'
+  Content-Security-Policy: default-src 'none'; script-src 'sha256-ee7//M1al0y7Quui9InJMb6YEI10+iLj70rwqvcDIQE=' https://huggingface.co blob:; worker-src blob:; connect-src https://huggingface.co https://*.huggingface.co https://*.hf.co; style-src 'unsafe-inline'; img-src data:; font-src data:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'
   X-Content-Type-Options: nosniff
   X-Frame-Options: DENY
   Referrer-Policy: no-referrer

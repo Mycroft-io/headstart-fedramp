@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.3.0 (2026-11-08)
+
+- All AI steps now run on Gemma 4 on the device: pasted-text reading, uncertain-exception attribution, and the readiness note. The Claude steps that existed only inside claude.ai are removed.
+- "Power up local AI" button in the masthead loads Gemma from anywhere on the page.
+
 ## 1.2.0 (2026-11-08)
 
 - Scanner reads the front of the report too: auditor, system described, subservice organizations and carve-out method, complementary user entity controls, locations, and every criterion referenced.

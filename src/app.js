@@ -10,7 +10,6 @@ const D = JSON.parse($('data').textContent);
 const { fedramp: data, mapping, mappingSoc2, annex, tsc, sample } = D;
 const TITLES = { iso: annex, soc2: tsc.criteria };
 const MAPPINGS = { iso: mapping, soc2: mappingSoc2 };
-let sampleFn = null; // claude.ai 'sample' capability, resolved after load; null elsewhere
 const store = { get(k) { try { return localStorage.getItem('hs20x.' + k); } catch { return null; } }, set(k, v) { try { localStorage.setItem('hs20x.' + k, v); } catch { /* optional */ } } };
 const TABS = ['indicators', 'rules', 'soa', 'export'];
 const GLYPH = { head: '●', partial: '◐', gap: '○', flag: '✕' };
@@ -158,7 +157,7 @@ const EXPORTS = [
 function renderExport() {
   const m = state.model; const top = C.workplanRows(m).slice(1).filter(r => r[0] === 1).slice(0, 8);
   $('view').innerHTML = `<p class="lede">Start with the indicators where ISO gives you nothing to build on${top.length ? `: ${top.map(r => `<strong>${esc(r[1].split(' ')[0])}</strong>`).join(', ')}` : ''}. Then extend the partials, then plan the FedRAMP rule sets as new program work. ${esc(C.NOTICE)}</p>
-    ${sampleFn ? `<div class="ai memo-card" style="margin-bottom:14px"><div class="ai-head"><span class="spark" aria-hidden="true">✦</span><strong>Draft a readiness summary with Claude</strong></div><p class="dim">A one-page note for your leadership from the reading above: where you stand for ${esc(C.CLASSES[m.cls])}, the first gaps to close, and what the FedRAMP rules add. Written from the computed result, on your own Claude account, after you allow it. Check it before you send it.</p>
+    ${hasWebGPU() ? `<div class="ai memo-card" style="margin-bottom:14px"><div class="ai-head"><span class="spark" aria-hidden="true">✦</span><strong>Draft a readiness summary with Gemma, on this device</strong></div><p class="dim">A short note for your leadership from the reading above: where you stand for ${esc(C.CLASSES[m.cls])}, the first gaps to close, and what the FedRAMP rules add. Written by Gemma 4 running in this browser from the computed result; nothing leaves your machine. ${gemmaReady ? '' : 'Loads Gemma first (about 2 GB, once). '}Check it before you send it.</p>
       <div class="row" style="justify-content:flex-start;align-items:center"><button type="button" class="btn cta" id="memo-run">Draft summary</button><button type="button" class="btn" id="memo-stop" hidden>Stop</button><button type="button" class="btn" id="memo-copy" hidden>Copy</button><span id="memo-status" class="dim" role="status" aria-live="polite"></span></div>
       <div id="memo" class="memo" hidden></div></div>` : ''}
     <ul class="exports">${EXPORTS.map(x => `<li><div><strong>${esc(x.name)}</strong> <span class="mono dim">.${x.ext}</span><p class="dim">${esc(x.what)}</p></div><button type="button" class="btn" data-export="${x.id}">Save</button></li>`).join('')}</ul><p id="export-status" class="status" role="status" aria-live="polite"></p>`;
@@ -242,6 +241,7 @@ let gemmaBusy = false;
 function gemmaLoadUi(progressText) {
   const box = $('gemma-load'); if (box) box.hidden = !hasWebGPU();
   const btn = $('gemma-load-btn'); if (btn) { btn.textContent = gemmaReady ? 'Gemma is loaded on this device' : gemmaBusy ? 'Loading…' : 'Load Gemma on this device'; btn.disabled = gemmaReady || gemmaBusy; }
+  const ex = $('ai-extract'); if (ex) ex.hidden = !hasWebGPU();
   const top = $('gemma-top'), topText = $('gemma-top-text');
   if (top) {
     top.hidden = !hasWebGPU();
@@ -295,80 +295,76 @@ async function runGemma() {
   } finally { run.disabled = false; stop.hidden = true; gemmaCtl = null; }
 }
 
-// ---------- Claude (claude.ai artifact only) ----------
-const AI_COPY = { not_granted: 'Claude is not allowed for this page, so this stays manual.', rate_limited: 'Claude is busy or you have hit a usage limit. Try again in a little while.', refused: 'Claude declined to read that text.', invalid_json: 'Claude did not return a readable result. Try pasting less text, such as only Section 4.', prompt_too_large: 'That is more text than one call can take. Paste Section 4 only.', upstream_error: 'The connection dropped. Try again.', session_expired: 'Sign in to Claude again, then retry.' };
-const aiCopy = e => AI_COPY[e?.code] || (['sampling_disabled', 'not_declared', 'capability_disabled', 'capability_removed'].includes(e?.code) ? AI_COPY.not_granted : AI_COPY.upstream_error);
+// ---------- Gemma: read pasted text, draft the summary ----------
+async function ensureGemma() {
+  if (gemmaReady) return true;
+  await loadGemma();
+  return gemmaReady;
+}
 let aiCtl = null;
 async function aiExtract() {
   const text = $('ai-text').value.trim(); const status = $('ai-status'); const found = $('ai-found');
   if (!text) { status.textContent = 'Paste the report text first.'; return; }
   const run = $('ai-run'), stop = $('ai-stop');
-  run.disabled = true; stop.hidden = false; found.hidden = true; status.textContent = 'Reading… this can take a minute for a long report.';
-  aiCtl = new AbortController();
-  const prompt = `You are reading text from a SOC 2 report (AICPA Trust Services Criteria). Extract facts only; do not assess anything.
-Reply with only a JSON object of this shape:
-{"reportType":"Type 1"|"Type 2"|"unknown","period":"<examination period or as-of date as written, or empty>","categories":["security","availability","confidentiality","processing","privacy"] (only those in scope),"serviceOrganization":"<name or empty>","exceptions":[{"criterion":"CC6.3","text":"<the exception or deviation as written, one sentence>"}],"criteriaTested":["CC1.1","CC1.2",...]}
-Rules: criteria are identifiers like CC1.1 to CC9.2, A1.1 to A1.3, C1.1, C1.2, PI1.1 to PI1.5, P1.1 to P8.1. An exception is any test result that is not "no exceptions noted" (deviations, exceptions, controls not operating). Include every exception you find, attributed to the criterion the control supports; if the text gives the control number but not the criterion, infer the criterion from the control's subject. If a field is not in the text, use empty or unknown. Do not invent anything.
-
-REPORT TEXT:
-` + text.slice(0, 200000);
+  run.disabled = true; stop.hidden = false; found.hidden = true;
   try {
-    const x = await sampleFn.json(prompt, { signal: aiCtl.signal, modelTier: 'default' });
-    if (!x || typeof x !== 'object') throw { code: 'invalid_json' };
-    fillSoc2Form(x);
-    const exc = Array.isArray(x.exceptions) ? x.exceptions.filter(e => e && C.normTsc(e.criterion, tsc)) : [];
-    const tested = Array.isArray(x.criteriaTested) ? x.criteriaTested.filter(c => C.normTsc(c, tsc)).length : 0;
-    status.textContent = `Done. ${exc.length} exception${exc.length === 1 ? '' : 's'} found${tested ? `, ${tested} criteria seen` : ''}. Check the form, then read the report.`;
-    found.hidden = false;
-    found.innerHTML = `<p class="dim" style="font-size:13px">${x.serviceOrganization ? `Service organization: <strong>${esc(x.serviceOrganization)}</strong>. ` : ''}What Claude found, written into the form above:</p>` + (exc.length ? `<ul class="found">${exc.map(e => `<li><span class="mono">${esc(String(e.criterion).toUpperCase())}</span><span>${esc(String(e.text || '').slice(0, 300))}</span><span class="tag t-bad">exception</span></li>`).join('')}</ul>` : '<p class="dim" style="font-size:13px">No exceptions found in the text.</p>');
-  } catch (e) {
-    status.textContent = e?.code === 'cancelled' ? 'Stopped.' : aiCopy(e);
-    if (['not_granted', 'sampling_disabled', 'not_declared', 'capability_disabled', 'capability_removed'].includes(e?.code)) $('ai-extract').hidden = true;
-  } finally { run.disabled = false; stop.hidden = true; aiCtl = null; }
+    // deterministic pass first: front matter, clean results, and whatever exceptions the rules can place
+    const r = scanReport(text.split(/\f|\n(?=\s*Page\s+\d+)/));
+    lastScan = r;
+    fillSoc2Form({ reportType: r.reportType, period: r.period, categories: r.categories, exceptions: r.exceptions.filter(e => e.criterion) });
+    status.textContent = 'Loading Gemma…';
+    if (!(await ensureGemma())) { status.textContent = 'Gemma is not available in this browser; the scanner\'s reading is in the form above.'; renderFound(r); found.hidden = false; return; }
+    aiCtl = new AbortController();
+    // Gemma reads Section 4 in chunks and lists exceptions as "CRITERION | text" lines; only valid criteria are kept
+    const body = text.length > 200000 ? text.slice(0, 200000) : text;
+    const chunks = []; for (let i = 0; i < body.length; i += 5000) chunks.push(body.slice(Math.max(0, i - 300), i + 5000));
+    const seen = new Map();
+    for (let i = 0; i < chunks.length; i++) {
+      if (aiCtl.signal.aborted) break;
+      status.textContent = `Gemma is reading part ${i + 1} of ${chunks.length}…`;
+      const prompt = `Below is text from a SOC 2 report's tests of controls. List every test result that is NOT "no exceptions noted": exceptions, deviations, controls not operating effectively. For each, write one line in the form\nCRITERION | one-sentence description of the exception\nwhere CRITERION is the Trust Services criterion the tested control supports (like CC6.3, CC7.1, A1.2, C1.2). If the text gives only a control number, infer the criterion from the control's subject. If there are none, write NONE. Write nothing else.\n\nTEXT:\n${chunks[i]}`;
+      let out = '';
+      try { out = await gemma.complete(prompt, { maxNewTokens: 300, signal: aiCtl.signal }); } catch (err) { if (aiCtl.signal.aborted) break; throw err; }
+      for (const line of out.split('\n')) {
+        const m = /^\s*[-*•]?\s*(CC\s?\d\.\d|A\s?1\.\d|C\s?1\.\d|PI\s?1\.\d|P\s?\d\.\d)\s*\|\s*(.+?)\s*$/i.exec(line);
+        if (!m) continue;
+        const id = C.normTsc(m[1], tsc); const desc = m[2].replace(/\s+/g, ' ').slice(0, 300);
+        if (!id || /^none$/i.test(desc)) continue;
+        const key = id + '|' + desc.slice(0, 40).toLowerCase();
+        if (!seen.has(key)) seen.set(key, { criterion: id, text: desc, byGemma: true, confidence: 'medium', candidates: [id], snippet: desc, control: '' });
+      }
+    }
+    // merge: rule-placed exceptions keep priority; Gemma adds the rest
+    const merged = [...r.exceptions.filter(e => e.criterion)];
+    for (const g of seen.values()) if (!merged.some(e => e.criterion === g.criterion && e.text.slice(0, 30).toLowerCase() === g.text.slice(0, 30).toLowerCase())) merged.push(g);
+    r.exceptions = merged; lastScan = r;
+    fillSoc2Form({ reportType: r.reportType, period: r.period, categories: r.categories, exceptions: merged });
+    renderFound(r); found.hidden = false;
+    status.textContent = aiCtl.signal.aborted ? 'Stopped.' : `Done. ${merged.length} exception${merged.length === 1 ? '' : 's'} in the form above (${seen.size} read by Gemma). Check them, then read the report.`;
+  } catch (e) { status.textContent = `Gemma could not read that (${e?.message || 'unknown error'}).`; }
+  finally { run.disabled = false; stop.hidden = true; aiCtl = null; }
 }
 let memoCtl = null;
 async function aiMemo() {
   const m = state.model; const out = $('memo'); const status = $('memo-status'); const run = $('memo-run'), stop = $('memo-stop'), copy = $('memo-copy');
-  run.disabled = true; stop.hidden = false; copy.hidden = true; out.hidden = false; out.textContent = 'Thinking…'; status.textContent = '';
-  memoCtl = new AbortController();
-  const gaps = m.ksis.filter(k => !k.optional && (k.state === 'gap' || k.state === 'flag')).map(k => `${k.id} ${k.name} [${m.states[k.state].label}]: ${k.adds}`);
-  const partials = m.ksis.filter(k => !k.optional && k.state === 'partial').map(k => `${k.id} ${k.name}: missing ${k.links.filter(l => !l.covered).map(l => l.id).join(', ')}`);
-  const heads = m.ksis.filter(k => !k.optional && k.state === 'head').map(k => k.id);
-  const prompt = `Write a one-page readiness note (about 350 words, plain prose with at most one short list) for a cloud provider's leadership team, from the data below. Audience: executives who know ${m.source === 'soc2' ? 'SOC 2' : 'ISO 27001'} but not FedRAMP. Tone: direct, specific, no hype, no percentages or scores. Structure: where we stand (2-3 sentences), the first things to close (name indicators by ID and what 20x asks for), what carries over and still needs re-evidencing, the FedRAMP rules as a separate workstream, and a closing sentence on sequencing. Do not invent facts, dates, costs or timelines. Do not mention this tool by name.
-
-DATA
-Source: ${m.src.label}${m.soc2 ? ` (${m.soc2.reportType || ''}${m.soc2.period ? ', ' + m.soc2.period : ''}; categories: ${(m.soc2.categories || []).join(', ')})` : ''}
-Target: FedRAMP 20x ${C.CLASSES[m.cls]} (${m.scored} indicators scored${m.optionalSkipped ? `, ${m.optionalSkipped} optional in this class` : ''})
-Head start: ${m.counts.head} indicators (${heads.join(', ')})
-Partial: ${m.counts.partial}
-Gaps and flags: ${m.counts.gap + m.counts.flag}
-FedRAMP rules with no equivalent: ${m.frr.length}, in sets: ${m.sets.map(s => `${s.name} (${s.rules.length})`).join('; ')}
-
-GAPS AND FLAGS
-${gaps.join('\n') || 'none'}
-
-PARTIALS
-${partials.join('\n') || 'none'}
-
-A note that applies to every indicator: 20x expects cloud-native, automated and continuously evidenced outcomes, validated by a third-party assessor, and FedRAMP-specific items such as FIPS 140-validated cryptography and FedRAMP reporting.`;
+  run.disabled = true; stop.hidden = false; copy.hidden = true; out.hidden = false; out.textContent = 'Loading Gemma…'; status.textContent = '';
   try {
-    const { text, truncated } = await sampleFn(prompt, { signal: memoCtl.signal, onText: ({ text }) => { out.textContent = text; } });
-    out.textContent = text; copy.hidden = false;
-    status.textContent = truncated ? 'Cut short. Ask again for a shorter note.' : 'Drafted by Claude from the reading above. Review before sending.';
-  } catch (e) {
-    out.textContent = e?.text || ''; if (!e?.text) out.hidden = true;
-    status.textContent = e?.code === 'cancelled' ? 'Stopped.' : aiCopy(e);
-  } finally { run.disabled = false; stop.hidden = true; memoCtl = null; }
+    if (!(await ensureGemma())) { out.textContent = ''; out.hidden = true; status.textContent = 'Gemma is not available in this browser.'; return; }
+    memoCtl = new AbortController(); out.textContent = 'Thinking…';
+    const gaps = m.ksis.filter(k => !k.optional && (k.state === 'gap' || k.state === 'flag')).slice(0, 12).map(k => `${k.id} ${k.name} [${m.states[k.state].label}]: ${k.adds}`);
+    const partials = m.ksis.filter(k => !k.optional && k.state === 'partial').slice(0, 12).map(k => `${k.id} ${k.name}`);
+    const prompt = `Write a short readiness note (about 250 words, plain prose, no headings, no bullet points, no percentages) for a cloud provider's leadership team who know ${m.source === 'soc2' ? 'SOC 2' : 'ISO 27001'} but not FedRAMP. Be direct and specific. Do not invent facts, dates, costs or timelines. Cover: where we stand for FedRAMP 20x ${C.CLASSES[m.cls]}; the first indicators to close, by ID, and what 20x asks for; what carries over but must be re-evidenced; and the FedRAMP rules as separate work.\n\nDATA\nSource: ${m.src.label}\nIndicators scored: ${m.scored}. Head start: ${m.counts.head}. Partial: ${m.counts.partial}. Gaps or flagged: ${m.counts.gap + m.counts.flag}. FedRAMP rules with no equivalent: ${m.frr.length}.\nGAPS AND FLAGS\n${gaps.join('\n') || 'none'}\nPARTIALS\n${partials.join('\n') || 'none'}\nNOTE: 20x expects cloud-native, automated, continuously evidenced outcomes validated by a third-party assessor, plus FedRAMP-specific items such as FIPS 140-validated cryptography and FedRAMP reporting.`;
+    const text = await gemma.complete(prompt, { maxNewTokens: 600, signal: memoCtl.signal, onText: t => { out.textContent = t; } });
+    out.textContent = text.trim(); copy.hidden = false;
+    status.textContent = memoCtl.signal.aborted ? 'Stopped.' : 'Drafted on this device by Gemma 4 from the reading above. Review before sending.';
+  } catch (e) { if (!out.textContent || out.textContent === 'Thinking…') out.hidden = true; status.textContent = memoCtl?.signal.aborted ? 'Stopped.' : `Gemma could not draft that (${e?.message || 'unknown error'}).`; }
+  finally { run.disabled = false; stop.hidden = true; memoCtl = null; }
 }
 async function copyMemo(btn) {
   const t = $('memo').textContent;
   try { await navigator.clipboard.writeText(t); btn.textContent = 'Copied'; setTimeout(() => { btn.textContent = 'Copy'; }, 1500); }
   catch { const r = document.createRange(); r.selectNodeContents($('memo')); const sel = getSelection(); sel.removeAllRanges(); sel.addRange(r); btn.textContent = 'Selected, press copy'; }
 }
-(async () => {
-  try { sampleFn = window.claude?.use ? await window.claude.use('sample') : null; } catch { sampleFn = null; }
-  if (sampleFn) { $('ai-extract').hidden = false; if (state.model && state.tab === 'export') renderExport(); }
-})();
 
 function renderTab() {
   for (const b of document.querySelectorAll('[data-tab]')) { const on = b.dataset.tab === state.tab; b.classList.toggle('on', on); b.setAttribute('aria-selected', String(on)); }
@@ -395,7 +391,7 @@ document.addEventListener('click', e => {
   else if (t.id === 'clear') clearAll();
   else if (t.id === 'use-paste') usePaste();
   else if (t.id === 'ai-run') aiExtract();
-  else if (t.id === 'ai-stop') aiCtl?.abort();
+  else if (t.id === 'ai-stop') { aiCtl?.abort(); gemmaCtl?.abort(); }
   else if (t.id === 'memo-run') aiMemo();
   else if (t.id === 'memo-stop') memoCtl?.abort();
   else if (t.id === 'memo-copy') copyMemo(t);
