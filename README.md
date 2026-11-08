@@ -4,7 +4,7 @@ A single web page that reads an ISO/IEC 27001:2022 Statement of Applicability or
 
 It runs entirely in the browser. Nothing is uploaded, the page makes no network requests, and `dist/index.html` works when opened from disk. The copy published inside claude.ai adds two optional steps that ask Claude, on the viewer's own account and with their consent: reading a SOC 2 report's Section 4 into the form, and drafting a one-page readiness note from the result. The public site has neither and never contacts a model.
 
-**Version 0.1.** Built and maintained by [Mycroft](https://mycroft.io). Not a FedRAMP tool and not endorsed by FedRAMP. The mapping is Mycroft's own work and is open to review.
+**Version 1.0.** Live at [mycroft-io.github.io/headstart-fedramp](https://mycroft-io.github.io/headstart-fedramp/). Built and maintained by [Mycroft](https://mycroft.io). Not a FedRAMP tool and not endorsed by FedRAMP. The mapping is Mycroft's own work and is open to review.
 
 Sibling project: [Crosswalk 20x](https://github.com/Mycroft-io/crosswalk-rev5-to-20x) reads a finished 20x package for agency reviewers.
 
