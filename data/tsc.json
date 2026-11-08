@@ -1,0 +1,17 @@
+{"_about":"AICPA Trust Services Criteria identifiers with short descriptive labels written for this tool. The criteria text belongs to the AICPA.",
+"categories":{"security":"Security (Common Criteria)","availability":"Availability","confidentiality":"Confidentiality","processing":"Processing Integrity","privacy":"Privacy"},
+"criteria":{
+"CC1.1":"Integrity and ethical values","CC1.2":"Board oversight","CC1.3":"Structures, reporting lines and authorities","CC1.4":"Competence: hiring, development and training","CC1.5":"Accountability for internal control",
+"CC2.1":"Quality information to support controls","CC2.2":"Internal communication","CC2.3":"External communication",
+"CC3.1":"Objectives specified","CC3.2":"Risk identification and analysis","CC3.3":"Fraud risk","CC3.4":"Identifying changes that affect controls",
+"CC4.1":"Ongoing and separate evaluations","CC4.2":"Evaluating and communicating deficiencies",
+"CC5.1":"Selecting control activities","CC5.2":"Technology general controls","CC5.3":"Policies and procedures",
+"CC6.1":"Logical access security software, infrastructure and architecture","CC6.2":"User registration and authorisation","CC6.3":"Access removal, modification and least privilege","CC6.4":"Physical access","CC6.5":"Disposal of assets","CC6.6":"Protection against external threats","CC6.7":"Restricting transmission and movement of information","CC6.8":"Prevention of unauthorised or malicious software",
+"CC7.1":"Detecting configuration changes and vulnerabilities","CC7.2":"Monitoring for anomalies and security events","CC7.3":"Evaluating security events","CC7.4":"Responding to security incidents","CC7.5":"Recovering from security incidents",
+"CC8.1":"Change management",
+"CC9.1":"Risk mitigation and business disruption","CC9.2":"Vendor and business partner risk",
+"A1.1":"Capacity management","A1.2":"Environmental protections, backup and recovery infrastructure","A1.3":"Recovery plan testing",
+"C1.1":"Identifying and maintaining confidential information","C1.2":"Disposal of confidential information",
+"PI1.1":"Processing objectives and definitions","PI1.2":"Input completeness and accuracy","PI1.3":"Processing completeness and accuracy","PI1.4":"Output completeness and accuracy","PI1.5":"Storage of inputs and outputs",
+"P1.1":"Privacy notice","P2.1":"Choice and consent","P3.1":"Collection consistent with objectives","P3.2":"Explicit consent for sensitive information","P4.1":"Use limited to objectives","P4.2":"Retention","P4.3":"Disposal","P5.1":"Access by data subjects","P5.2":"Correction","P6.1":"Disclosure with consent","P6.2":"Disclosure record","P6.3":"Notification of unauthorised disclosure","P6.4":"Third-party commitments","P6.5":"Third-party notification of breaches","P6.6":"Breach notification to data subjects","P6.7":"Accounting of disclosures","P7.1":"Data quality","P8.1":"Inquiries, complaints and disputes"},
+"categoryOf":{"CC":"security","A":"availability","C":"confidentiality","PI":"processing","P":"privacy"}}

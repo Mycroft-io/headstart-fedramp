@@ -1,0 +1,7 @@
+{"_about": "Fictional SOC 2 Type 2 scope and exceptions for Northwind Analytics Ltd., for testing and the demo. Not a real company or report.",
+ "reportType": "Type 2", "period": "1 July 2025 to 30 June 2026", "categories": ["security", "availability"],
+ "exceptions": [
+  {"criterion": "CC6.3", "text": "For 2 of 25 sampled terminated employees, logical access was removed more than 24 hours after the termination date."},
+  {"criterion": "CC7.1", "text": "Monthly authenticated vulnerability scans were not evidenced for two of the twelve months in the period."},
+  {"criterion": "CC8.1", "text": "For 3 of 40 sampled changes, approval was recorded after deployment to production."}
+ ]}

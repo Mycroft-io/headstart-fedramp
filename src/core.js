@@ -2,13 +2,65 @@
 // FedRAMP 20x Key Security Indicators. Pure functions, no DOM. SoA text is untrusted.
 
 export const CLASSES = { b: 'Class B', c: 'Class C', d: 'Class D' };
-export const STATES = {
-  head: { label: 'Head start', long: 'Every strongly related Annex A control is applicable and implemented in your SoA. Expect to re-evidence it in 20x terms.' },
-  partial: { label: 'Partial', long: 'Some related Annex A controls are in place. The rest, and the 20x additions, are open.' },
-  gap: { label: 'Gap', long: 'None of the related Annex A controls are applicable and implemented in your SoA.' },
-  excluded: { label: 'Excluded in SoA', long: 'A strongly related control is marked not applicable in your SoA. 20x will expect it for the federal boundary.' },
+export const SOURCES = {
+  iso: { label: 'ISO/IEC 27001:2022 SoA', unit: 'Annex A control', units: 'Annex A controls', mappingKey: 'iso',
+    states: {
+      head: { label: 'Head start', long: 'Every strongly related Annex A control is applicable and implemented in your SoA. Expect to re-evidence it in 20x terms.' },
+      partial: { label: 'Partial', long: 'Some related Annex A controls are in place. The rest, and the 20x additions, are open.' },
+      gap: { label: 'Gap', long: 'None of the related Annex A controls are applicable and implemented in your SoA.' },
+      flag: { label: 'Excluded in SoA', long: 'A strongly related control is marked not applicable in your SoA. 20x will expect it for the federal boundary.' } } },
+  soc2: { label: 'SOC 2 report', unit: 'Trust Services criterion', units: 'Trust Services criteria', mappingKey: 'tsc',
+    states: {
+      head: { label: 'Head start', long: 'Every strongly related criterion was in scope with no exception. Expect to re-evidence it in 20x terms.' },
+      partial: { label: 'Partial', long: 'Some related criteria were in scope and clean. The rest, and the 20x additions, are open.' },
+      gap: { label: 'Gap', long: 'None of the related criteria were in scope of the report.' },
+      flag: { label: 'Exception noted', long: 'The report noted an exception against a strongly related criterion. Fix the finding before building on it.' } } },
 };
-export const STATE_ORDER = ['head', 'partial', 'gap', 'excluded'];
+export const STATES = SOURCES.iso.states; // default labels; buildModel attaches the source's own
+export const STATE_ORDER = ['head', 'partial', 'gap', 'flag'];
+export const TSC_RE = /\b(CC\d\.\d|A1\.\d|C1\.\d|PI1\.\d|P[1-8]\.\d)\b/gi;
+
+// SOC 2 input: { reportType: 'Type 1'|'Type 2', period: string, categories: string[], exceptions: [{criterion, text}], controls?: [{criterion, control, result}] }
+// Returns the same shape as a parsed SoA: a Map of entries plus notes.
+export function soc2Entries(input, tsc) {
+  const cats = new Set((input.categories || []).map(c => String(c).toLowerCase()));
+  cats.add('security');
+  const notes = [];
+  const exceptions = new Map();
+  for (const e of input.exceptions || []) {
+    const id = normTsc(e.criterion, tsc);
+    if (!id) continue;
+    exceptions.set(id, [...(exceptions.get(id) || []), String(e.text || '').trim()].filter(Boolean));
+  }
+  const tested = new Map();
+  for (const c of input.controls || []) { const id = normTsc(c.criterion, tsc); if (id) tested.set(id, [...(tested.get(id) || []), c]); }
+  const controls = new Map();
+  for (const id of Object.keys(tsc.criteria)) {
+    const cat = tsc.categoryOf[id.replace(/[\d.].*$/, '')];
+    if (!cats.has(cat)) continue;
+    const ex = exceptions.get(id) || [];
+    controls.set(id, { id, applicable: true, status: ex.length ? 'partial' : 'implemented', flag: ex.length > 0, justification: ex.join(' | ') || (tested.get(id) || []).map(c => c.control).filter(Boolean).slice(0, 3).join(' | '), row: 0 });
+  }
+  if (input.reportType && /1|I\b/.test(String(input.reportType))) notes.push('A Type 1 report describes control design at a point in time. 20x expects operating evidence, so treat every head start as design-only.');
+  if (!cats.has('availability')) notes.push('Availability was not in scope, so the recovery and availability indicators read as gaps even if you run those controls.');
+  if (!cats.has('confidentiality')) notes.push('Confidentiality was not in scope; data removal (KSI-SVC-RUD) leans on it.');
+  return { controls, notes, soc2: { ...input, categories: [...cats] } };
+}
+export function normTsc(s, tsc) {
+  const m = /^\s*(CC|A|C|PI|P)\s*(\d)\s*\.\s*(\d)\s*$/i.exec(String(s ?? ''));
+  if (!m) return null;
+  const id = `${m[1].toUpperCase()}${m[2]}.${m[3]}`;
+  return tsc.criteria[id] ? id : null;
+}
+// Pull "CC6.1: text" style lines out of free text.
+export function parseExceptionLines(text) {
+  const out = [];
+  for (const line of String(text || '').split(/\n+/)) {
+    const ids = [...new Set([...line.matchAll(TSC_RE)].map(m => m[1].toUpperCase()))];
+    for (const id of ids) out.push({ criterion: id, text: line.replace(TSC_RE, '').replace(/^[\s:;,\-–—]+/, '').trim() });
+  }
+  return out;
+}
 
 const ANNEX_RANGES = { 5: 37, 6: 8, 7: 14, 8: 34 };
 export function normIso(s) {
@@ -130,25 +182,27 @@ export function parseXlsx(bytes, unzip, dec) {
 
 // ---------- model ----------
 
-export function buildModel(data, mapping, annex, soa, cls) {
+export function buildModel(data, mapping, annex, soa, cls, source = 'iso') {
+  const src = SOURCES[source]; const key = src.mappingKey;
   const ids = Object.keys(mapping).filter(k => k !== '_about');
   const counts = Object.fromEntries(STATE_ORDER.map(s => [s, 0]));
   let optionalSkipped = 0;
   const ksis = ids.map(id => {
     const k = data.ksi[id]; const m = mapping[id];
     const optional = cls === 'b' && k.optionalInB;
-    const links = Object.entries(m.iso).map(([c, strength]) => {
+    const links = Object.entries(m[key]).map(([c, strength]) => {
       const e = soa.controls.get(c) || null;
       const applicable = e ? e.applicable !== false : false;
       const status = e ? (e.status ?? (applicable ? 'implemented' : null)) : null;
       const covered = applicable && status === 'implemented';
-      return { id: c, title: annex[c], strength, entry: e, applicable, status, covered, listed: !!e };
+      const flagged = !!e && (e.flag === true || (source === 'iso' && e.applicable === false));
+      return { id: c, title: annex[c], strength, entry: e, applicable, status, covered, listed: !!e, flagged, note: e?.justification || '' };
     });
     const strong = links.filter(l => l.strength === 'strong');
     const coveredN = links.filter(l => l.covered).length;
-    const excluded = strong.some(l => l.entry && l.entry.applicable === false);
+    const excluded = strong.some(l => l.flagged);
     let state;
-    if (excluded) state = 'excluded';
+    if (excluded) state = 'flag';
     else if (strong.length ? strong.every(l => l.covered) : coveredN === links.length) state = 'head';
     else if (coveredN > 0 || links.some(l => l.status === 'partial')) state = 'partial';
     else state = 'gap';
@@ -168,34 +222,34 @@ export function buildModel(data, mapping, annex, soa, cls) {
     notApplicable: [...soa.controls.values()].filter(c => c.applicable === false).length,
     hasStatus: [...soa.controls.values()].some(c => c.status !== null),
   };
-  const unusedAnnex = Object.keys(annex).filter(c => !ids.some(k => mapping[k].iso[c]));
-  return { cls, ksis, counts, scored: ids.length - optionalSkipped, optionalSkipped, themes, frr, sets, soaStats, unusedAnnex, rulesVersion: data.rulesVersion };
+  const unusedAnnex = Object.keys(annex).filter(c => !ids.some(k => mapping[k][key][c]));
+  return { source, src, states: src.states, cls, ksis, counts, scored: ids.length - optionalSkipped, optionalSkipped, themes, frr, sets, soaStats, unusedAnnex, rulesVersion: data.rulesVersion, soc2: soa.soc2 || null };
 }
 
 // ---------- exports ----------
 
-export const NOTICE = 'Headstart 20x is a planning aid. It maps FedRAMP 20x Key Security Indicators to ISO/IEC 27001:2022 Annex A controls and reads your Statement of Applicability against that mapping. An Annex A control being implemented does not mean the indicator is met: 20x asks for cloud-native, automated and continuously evidenced outcomes, and for FedRAMP-specific requirements that ISO 27001 does not contain. The mapping is Mycroft\'s, not FedRAMP\'s.';
+export const NOTICE = 'Headstart 20x is a planning aid. It maps FedRAMP 20x Key Security Indicators to ISO/IEC 27001:2022 Annex A controls and to the SOC 2 Trust Services Criteria, and reads your SoA or report against that mapping. A control being implemented or a criterion being clean does not mean the indicator is met: 20x asks for cloud-native, automated and continuously evidenced outcomes, and for FedRAMP-specific requirements that ISO 27001 does not contain. The mapping is Mycroft\'s, not FedRAMP\'s.';
 
 export function ksiRows(model) {
-  const head = ['KSI', 'Name', 'Theme', 'Readiness', 'Related Annex A controls (strength)', 'Covered in SoA', 'Not covered', 'What 20x adds', 'KSI statement'];
-  return [head, ...model.ksis.map(k => [k.id, k.name, k.theme, k.optional ? `${STATES[k.state].label} (optional in Class B)` : STATES[k.state].label,
+  const head = ['KSI', 'Name', 'Theme', 'Readiness', `Related ${model.src.units} (strength)`, 'Covered', 'Not covered', 'What 20x adds', 'KSI statement'];
+  return [head, ...model.ksis.map(k => [k.id, k.name, k.theme, k.optional ? `${model.states[k.state].label} (optional in Class B)` : model.states[k.state].label,
     k.links.map(l => `${l.id} ${l.title} (${l.strength})`).join('\n'),
     k.links.filter(l => l.covered).map(l => l.id).join(', '),
-    k.links.filter(l => !l.covered).map(l => `${l.id}: ${!l.listed ? 'not in SoA' : !l.applicable ? 'not applicable' : l.status || 'no status'}`).join('\n'),
+    k.links.filter(l => !l.covered).map(l => `${l.id}: ${l.flagged && model.source === 'soc2' ? 'exception' : !l.listed ? (model.source === 'soc2' ? 'not in scope' : 'not in SoA') : !l.applicable ? 'not applicable' : l.status || 'no status'}`).join('\n'),
     k.adds, k.statement])];
 }
 export function ruleRows(model) {
   return [['Rule', 'Name', 'Rule set', 'Applies to classes', 'Statement'], ...model.frr.map(r => [r.id, r.name, r.set, r.classes.map(c => c.toUpperCase()).join(', '), r.statement])];
 }
 export function workplanRows(model) {
-  const head = ['Priority', 'Item', 'Type', 'Why', 'Annex A controls to extend', 'What 20x adds'];
+  const head = ['Priority', 'Item', 'Type', 'Why', `${model.src.units} to extend`, 'What 20x adds'];
   const rows = [];
   for (const k of model.ksis.filter(k => !k.optional && k.state !== 'head')) {
-    const pri = k.state === 'gap' || k.state === 'excluded' ? 1 : 2;
-    rows.push([pri, `${k.id} ${k.name}`, 'Key Security Indicator', STATES[k.state].long, k.links.filter(l => !l.covered).map(l => l.id).join(', '), k.adds]);
+    const pri = k.state === 'gap' || k.state === 'flag' ? 1 : 2;
+    rows.push([pri, `${k.id} ${k.name}`, 'Key Security Indicator', model.states[k.state].long, k.links.filter(l => !l.covered).map(l => l.id).join(', '), k.adds]);
   }
   for (const k of model.ksis.filter(k => !k.optional && k.state === 'head')) rows.push([3, `${k.id} ${k.name}`, 'Key Security Indicator', 'Re-evidence in 20x terms.', '', k.adds]);
-  for (const s of model.sets) rows.push([2, `${s.name} (${s.rules.length} rules)`, 'FedRAMP rules', 'FedRAMP-specific. No ISO 27001 control evidences these.', '', s.rules.slice(0, 6).map(r => r.id).join(', ') + (s.rules.length > 6 ? ', …' : '')]);
+  for (const s of model.sets) rows.push([2, `${s.name} (${s.rules.length} rules)`, 'FedRAMP rules', `FedRAMP-specific. No ${model.src.unit} evidences these.`, '', s.rules.slice(0, 6).map(r => r.id).join(', ') + (s.rules.length > 6 ? ', …' : '')]);
   rows.sort((a, b) => a[0] - b[0]);
   return [head, ...rows];
 }
@@ -226,14 +280,15 @@ export function toXlsx(sheets, zip, enc) {
   return zip(Object.fromEntries(Object.entries(files).map(([k, v]) => [k, enc(v)])));
 }
 export function workbookSheets(model, meta) {
-  const summary = [['Field', 'Value'], ['Target', `FedRAMP 20x ${CLASSES[model.cls]}`], ['Generated', meta.generated], ['FedRAMP rules version', model.rulesVersion],
-    ['Annex A controls listed in SoA', model.soaStats.listed], ['Applicable', model.soaStats.applicable], ['Applicable and implemented', model.soaStats.implemented],
-    ...STATE_ORDER.map(s => [`KSIs: ${STATES[s].label}`, model.counts[s]]), ['KSIs scored', model.scored], ['KSIs optional in this class', model.optionalSkipped],
+  const summary = [['Field', 'Value'], ['Source', model.src.label], ['Target', `FedRAMP 20x ${CLASSES[model.cls]}`], ['Generated', meta.generated], ['FedRAMP rules version', model.rulesVersion],
+    [`${model.src.units} read`, model.soaStats.listed], ['Applicable / in scope', model.soaStats.applicable], ['Implemented / clean', model.soaStats.implemented],
+    ...STATE_ORDER.map(s => [`KSIs: ${model.states[s].label}`, model.counts[s]]), ['KSIs scored', model.scored], ['KSIs optional in this class', model.optionalSkipped],
     ['FedRAMP rules with no ISO equivalent', model.frr.length], ['How to read this', NOTICE]];
   return [
     { name: 'Summary', rows: summary, widths: [40, 90] },
     { name: 'Work plan', rows: workplanRows(model), widths: [9, 40, 22, 60, 30, 80] },
     { name: 'KSI readiness', rows: ksiRows(model), widths: [14, 34, 28, 16, 60, 24, 40, 80, 80] },
     { name: 'FedRAMP rules', rows: ruleRows(model), widths: [16, 40, 34, 14, 100] },
+    ...(model.soc2 ? [{ name: 'SOC 2 input', rows: [['Field', 'Value'], ['Report type', model.soc2.reportType || ''], ['Period', model.soc2.period || ''], ['Categories in scope', (model.soc2.categories || []).join(', ')], ...(model.soc2.exceptions || []).map(e => ['Exception ' + e.criterion, e.text])], widths: [28, 100] }] : []),
   ];
 }

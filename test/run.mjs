@@ -53,3 +53,28 @@ assert.ok(Object.keys(unzipSync(wb)).includes('xl/worksheets/sheet4.xml'));
 assert.ok(C.toCsv([['=cmd']]).includes(`"'=cmd"`));
 console.log('workplan rows', C.workplanRows(m).length - 1, 'sample excluded', m.ksis.filter(k => k.state === 'excluded').map(k => k.id));
 console.log('ALL TESTS PASSED');
+
+// ---- SOC 2 ----
+{
+  const tsc = JSON.parse(fs.readFileSync('data/tsc.json', 'utf8'));
+  const m2 = JSON.parse(fs.readFileSync('data/mapping-soc2.json', 'utf8'));
+  const soc = JSON.parse(fs.readFileSync('samples/northwind-soc2.json', 'utf8'));
+  assert.deepEqual(C.parseExceptionLines('CC6.3: late removal\nA1.2 – backups not tested\nnothing here\nCC7.1, CC8.1: both').map(e => e.criterion), ['CC6.3', 'A1.2', 'CC7.1', 'CC8.1']);
+  assert.equal(C.normTsc('cc 6.1', tsc), 'CC6.1'); assert.equal(C.normTsc('CC6.9', tsc), null); assert.equal(C.normTsc('P6.5', tsc), 'P6.5');
+  const e = C.soc2Entries(soc, tsc);
+  assert.ok(e.controls.has('A1.2') && !e.controls.has('C1.1'), 'availability in, confidentiality out');
+  assert.equal(e.controls.get('CC6.3').flag, true);
+  for (const cls of ['b', 'c', 'd']) {
+    const m = C.buildModel(data, m2, tsc.criteria, e, cls, 'soc2');
+    assert.equal(Object.values(m.counts).reduce((a, b) => a + b, 0) + m.optionalSkipped, 46);
+    const sud = m.ksis.find(k => k.id === 'KSI-SVC-RUD'); assert.notEqual(sud.state, 'head', 'confidentiality out of scope -> no head start'); const trc = m.ksis.find(k => k.id === 'KSI-RPL-TRC'); assert.equal(trc.state, 'head');
+    const aam = m.ksis.find(k => k.id === 'KSI-IAM-AAM'); assert.equal(aam.state, 'flag', 'CC6.3 exception flags AAM');
+    const ofa = m.ksis.find(k => k.id === 'KSI-CNA-OFA'); assert.equal(ofa.state, 'head');
+    console.log('soc2', cls, m.counts);
+    const wb = C.toXlsx(C.workbookSheets(m, { generated: 'x' }), zipSync, strToU8); assert.ok(Object.keys(unzipSync(wb)).includes('xl/worksheets/sheet5.xml'));
+  }
+  const sec = C.buildModel(data, m2, tsc.criteria, C.soc2Entries({ categories: [], exceptions: [] }, tsc), 'c', 'soc2');
+  assert.equal(sec.counts.flag, 0); assert.ok(['KSI-CNA-OFA', 'KSI-RPL-TRC', 'KSI-RPL-ABO'].every(id => sec.ksis.find(k => k.id === id).state !== 'head'), 'availability out of scope: no head start on availability indicators'); assert.ok(sec.ksis.filter(k => k.state === 'gap').every(k => k.links.every(l => !/^CC/.test(l.id))), 'security-only: gaps only where no CC criterion maps');
+  console.log('security-only gaps', sec.ksis.filter(k => k.state === 'gap').map(k => k.id));
+}
+console.log('SOC 2 TESTS PASSED');
