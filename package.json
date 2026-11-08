@@ -1,0 +1,26 @@
+{
+  "name": "headstart-20x",
+  "version": "0.1.0",
+  "description": "Reads an ISO/IEC 27001:2022 Statement of Applicability and shows how far it gets you toward FedRAMP 20x Class B, C or D.",
+  "scripts": {
+    "data": "python3 -I build/make_data.py ../crosswalk/data/reference.json data/fedramp.json",
+    "sample": "node build/make_sample.mjs",
+    "build": "node build/build.mjs",
+    "test": "esbuild test/run.mjs --bundle --platform=node --format=esm --outfile=.tmp/test.mjs --log-level=error --banner:js=\"import {createRequire as __cr} from 'module';const require=__cr(import.meta.url);\" && node .tmp/test.mjs"
+  },
+  "dependencies": {
+    "fflate": "^0.8.3"
+  },
+  "private": true,
+  "type": "module",
+  "license": "Apache-2.0",
+  "homepage": "https://github.com/Mycroft-io/iso27001-to-fedramp-20x",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Mycroft-io/iso27001-to-fedramp-20x.git"
+  },
+  "author": "Mycroft Technologies Inc. (https://mycroft.io)",
+  "devDependencies": {
+    "esbuild": "^0.28.2"
+  }
+}
