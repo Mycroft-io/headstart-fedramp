@@ -62,6 +62,9 @@ a { color: var(--link); } a:focus-visible, button:focus-visible, summary:focus-v
 .btn { font: 600 14px/1 var(--display); letter-spacing: .01em; padding: 13px 22px; border-radius: var(--r); border: 1px solid var(--line); background: var(--surface); color: var(--ink); cursor: pointer; }
 .btn:hover { border-color: var(--ink); } .btn:disabled { opacity: .5; cursor: not-allowed; }
 .btn.cta { background: var(--cta); border-color: var(--cta); color: var(--cta-ink); padding-inline: 28px; }
+.powered-badge { cursor: pointer; background: transparent; }
+.powered-badge[disabled] { cursor: default; opacity: 1; }
+.powered-badge.ready { border-color: var(--mint); color: var(--mint); }
 .powered-badge { display: inline-flex; align-items: center; gap: 6px; font: 600 12px/1 var(--display); letter-spacing: .04em; text-transform: uppercase; color: var(--on-deep); text-decoration: none; padding: 9px 12px; border: 1px solid rgba(255, 255, 255, .22); border-radius: 99px; } .powered-badge:hover { border-color: var(--on-deep); } .powered-badge .spark { color: var(--mint); font-size: 14px; }
 .btn.ghost { background: transparent; border-color: rgba(255, 255, 255, .28); color: var(--on-deep); } .btn.ghost:hover { border-color: var(--on-deep); }
 .lockup { display: inline-block; aspect-ratio: 450 / 101; background: currentColor; -webkit-mask: url("/*__LOGO__*/") center / contain no-repeat; mask: url("/*__LOGO__*/") center / contain no-repeat; vertical-align: -0.1em; }
@@ -245,7 +248,7 @@ body.dragging::after { content: "Drop package files to load them"; position: fix
         <p>Headstart 20x reads your Statement of Applicability or SOC 2 report and lays it against the 46 Key Security Indicators and the FedRAMP rules for Class B, C or D. It shows where your program gives you a head start, where it falls short, and what 20x adds. Your files stay in your browser.</p>
       </div>
       <div class="actions">
-        <a class="powered-badge" href="https://ai.google.dev/gemma" target="_blank" rel="noopener noreferrer" title="On-device reading runs Gemma 4 in your browser"><span class="spark" aria-hidden="true">✦</span>Powered by Gemma</a>
+        <button type="button" class="powered-badge" id="gemma-top" title="Loads Gemma 4 into this browser once (about 2 GB). It then reads reports on this device; nothing leaves your machine."><span class="spark" aria-hidden="true">✦</span><span id="gemma-top-text">Power up local AI</span></button>
         <input id="file" type="file" accept=".xlsx,.csv,.tsv,.txt,text/csv,text/plain,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden>
         <button id="open" type="button" class="btn cta">Start with your SoA or SOC 2</button>
         <button id="sample" type="button" class="btn ghost" data-sample="iso">View a sample</button>

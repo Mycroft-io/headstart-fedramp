@@ -7,7 +7,15 @@ export const MODEL_ID = 'google/gemma-4-E2B-it-qat-mobile-transformers';
 export const GEMMA_TERMS = 'https://ai.google.dev/gemma/terms';
 export const DOWNLOAD_NOTE = 'About 2 GB, downloaded once from Hugging Face and kept in your browser cache. Needs WebGPU (Chrome or Edge) and a machine with a GPU or 16 GB of memory.';
 
-export function hasWebGPU() { return typeof navigator !== 'undefined' && 'gpu' in navigator; }
+let gpuOk = null;
+export function hasWebGPU() { return gpuOk === true; }
+// Ask for an adapter once; 'gpu' in navigator alone is true on machines that cannot run a model.
+export async function probeWebGPU() {
+  if (gpuOk !== null) return gpuOk;
+  try { const a = typeof navigator !== 'undefined' && navigator.gpu ? await navigator.gpu.requestAdapter() : null; gpuOk = !!a; }
+  catch { gpuOk = false; }
+  return gpuOk;
+}
 
 export function createGemmaEngine({ runtimeUrl = RUNTIME_URL, onProgress = () => {} } = {}) {
   let model = null, loading = null;

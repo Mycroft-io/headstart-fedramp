@@ -2,7 +2,7 @@ import { zipSync, strToU8, unzipSync, strFromU8 } from 'fflate';
 import * as C from './core.js';
 import { scanReport } from './scanner.js';
 import { pdfToPages } from './pdftext.js';
-import { createGemmaEngine, hasWebGPU, DOWNLOAD_NOTE } from './engines/gemma.js';
+import { createGemmaEngine, hasWebGPU, probeWebGPU, DOWNLOAD_NOTE } from './engines/gemma.js';
 
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -238,23 +238,33 @@ function syncExceptionsFromScan() {
 
 // ---------- Gemma on-device ----------
 let gemma = null, gemmaCtl = null, gemmaReady = false;
-function gemmaLoadUi() {
-  const box = $('gemma-load'); if (!box) return;
-  box.hidden = !hasWebGPU();
-  $('gemma-load-btn').textContent = gemmaReady ? 'Gemma is loaded on this device' : 'Load Gemma on this device';
-  $('gemma-load-btn').disabled = gemmaReady;
+let gemmaBusy = false;
+function gemmaLoadUi(progressText) {
+  const box = $('gemma-load'); if (box) box.hidden = !hasWebGPU();
+  const btn = $('gemma-load-btn'); if (btn) { btn.textContent = gemmaReady ? 'Gemma is loaded on this device' : gemmaBusy ? 'Loading…' : 'Load Gemma on this device'; btn.disabled = gemmaReady || gemmaBusy; }
+  const top = $('gemma-top'), topText = $('gemma-top-text');
+  if (top) {
+    top.hidden = !hasWebGPU();
+    top.classList.toggle('ready', gemmaReady);
+    top.disabled = gemmaReady || gemmaBusy;
+    topText.textContent = gemmaReady ? 'Local AI ready · Gemma 4' : gemmaBusy ? (progressText || 'Loading local AI…') : 'Power up local AI';
+    top.title = gemmaReady ? 'Gemma 4 is loaded in this browser and reads reports on this device.' : 'Loads Gemma 4 into this browser once (about 2 GB). It then reads reports on this device; nothing leaves your machine.';
+  }
 }
 async function loadGemma() {
-  const status = $('gemma-load-status'), btn = $('gemma-load-btn');
-  btn.disabled = true; gemmaCtl = new AbortController(); $('gemma-load-stop').hidden = false;
+  if (gemmaBusy || gemmaReady) return;
+  if (!$('empty').hidden) showSource('soc2'); // the progress line lives on the SOC 2 panel
+  const status = $('gemma-load-status');
+  gemmaBusy = true; gemmaCtl = new AbortController(); $('gemma-load-stop').hidden = false; gemmaLoadUi();
   const fmt = p => p.kind === 'bytes' && p.total ? `${p.message} ${(p.loaded / 1048576).toFixed(0)} / ${(p.total / 1048576).toFixed(0)} MB` : p.fraction != null ? `${p.message} ${Math.round(p.fraction * 100)}%` : p.message || 'Loading';
+  const short = p => p.kind === 'bytes' && p.total ? `Loading local AI ${Math.round(100 * p.loaded / p.total)}%` : p.fraction != null ? `Loading local AI ${Math.round(p.fraction * 100)}%` : 'Loading local AI…';
   try {
-    gemma ??= createGemmaEngine({ onProgress: p => { status.textContent = fmt(p); } });
+    gemma ??= createGemmaEngine({ onProgress: p => { status.textContent = fmt(p); gemmaLoadUi(short(p)); } });
     status.textContent = 'Starting…';
     gemmaReady = await gemma.ready(gemmaCtl.signal);
     status.textContent = gemmaReady ? 'Ready. Gemma runs on this device; it will review uncertain exceptions after each scan.' : 'WebGPU is not available in this browser.';
   } catch (err) { status.textContent = gemmaCtl.signal.aborted ? 'Stopped.' : /fetch|network|download|Failed/i.test(String(err?.message)) ? 'Could not download the runtime or model. Check the connection and try again.' : `Gemma could not load here (${err?.message || 'unknown error'}).`; }
-  finally { $('gemma-load-stop').hidden = true; gemmaCtl = null; gemmaLoadUi(); }
+  finally { gemmaBusy = false; $('gemma-load-stop').hidden = true; gemmaCtl = null; gemmaLoadUi(); if (gemmaReady && lastScan) { const u = lastScan.exceptions.filter(e => e.confidence !== 'high' && (e.candidates || []).length > 1); if (u.length) runGemma(); } }
 }
 async function runGemma() {
   if (!lastScan) return;
@@ -373,7 +383,7 @@ function setTab(t, fromHash) {
 
 // ---------- events ----------
 document.addEventListener('click', e => {
-  const t = e.target.closest('[data-tab],[data-state],[data-export],#open,#clear,[data-open],[data-sample],[data-src],#use-paste,#ai-run,#ai-stop,#memo-run,#memo-stop,#memo-copy,#pdf-open,#gemma-run,#gemma-stop,#gemma-load-btn,#gemma-load-stop');
+  const t = e.target.closest('[data-tab],[data-state],[data-export],#open,#clear,[data-open],[data-sample],[data-src],#use-paste,#ai-run,#ai-stop,#memo-run,#memo-stop,#memo-copy,#pdf-open,#gemma-run,#gemma-stop,#gemma-load-btn,#gemma-load-stop,#gemma-top');
   if (!t) return;
   if (t.dataset.tab) setTab(t.dataset.tab);
   else if (t.dataset.state) { const s = t.dataset.state; state.states.has(s) ? state.states.delete(s) : state.states.add(s); renderCoverage(); if (state.tab !== 'indicators') setTab('indicators'); else renderIndicators(); }
@@ -392,7 +402,7 @@ document.addEventListener('click', e => {
   else if (t.id === 'pdf-open') $('pdf').click();
   else if (t.id === 'gemma-run') runGemma();
   else if (t.id === 'gemma-stop' || t.id === 'gemma-load-stop') gemmaCtl?.abort();
-  else if (t.id === 'gemma-load-btn') loadGemma();
+  else if (t.id === 'gemma-load-btn' || t.id === 'gemma-top') loadGemma();
 });
 document.addEventListener('toggle', e => {
   const d = e.target; if (!d.classList?.contains('ctl') || !d.open) return;
@@ -421,5 +431,6 @@ addEventListener('hashchange', () => { if (location.hash === '#sample') loadSamp
 
 $('rules-version').textContent = data.rulesVersion;
 gemmaLoadUi();
+probeWebGPU().then(() => { gemmaLoadUi(); if (lastScan) renderFound(lastScan); });
 state.tab = TABS.includes(location.hash.slice(1)) ? location.hash.slice(1) : 'indicators';
 if (location.hash === '#sample') loadSample('iso'); else if (location.hash === '#sample-soc2') loadSample('soc2'); else { refresh(); if (location.hash === '#sample-scan') sampleScan(); }
