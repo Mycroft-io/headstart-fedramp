@@ -24,8 +24,9 @@ assert.deepEqual([...b.categories].sort(), ['availability', 'confidentiality', '
 assert.deepEqual(b.exceptions.map(e => e.criterion), ['C1.2', 'CC9.2']);
 const c = scanReport(await pages('test/fixtures/fabrikam-soc2-type2.pdf'));
 console.log('C', c.reportType, c.categories, c.exceptions.map(e => [e.criterion, e.confidence, e.via, e.control]));
-assert.deepEqual(c.exceptions.map(e => e.criterion), ['CC6.3', 'CC8.1'], 'control-number layout resolved through the mapping table');
-assert.ok(c.exceptions.every(e => e.via === 'map'));
+assert.deepEqual(c.exceptions.slice(0, 2).map(e => e.criterion), ['CC6.3', 'CC8.1'], 'control-number layout resolved through the mapping table');
+assert.ok(c.exceptions.slice(0, 2).every(e => e.via === 'map'));
+assert.equal(c.exceptions[2].confidence, 'low', 'unmapped control stays uncertain'); assert.ok(c.exceptions[2].candidates.length > 1);
 // not a report
 const n = scanReport(['Quarterly newsletter', 'Nothing to see here.']);
 assert.equal(n.exceptions.length, 0); assert.ok(n.notes.some(x => /not be a SOC 2/.test(x)));

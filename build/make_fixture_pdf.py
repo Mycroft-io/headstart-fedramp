@@ -52,7 +52,8 @@ def report_c(path):
          ["IAM-3", "Access removed on termination within 1 business day.", "Exception noted: 1 of 15 sampled terminations exceeded 1 business day."],
          ["VULN-1", "Critical vulnerabilities remediated within 30 days.", "No exceptions noted."],
          ["LOG-1", "Logs retained for 12 months.", "No exceptions noted."],
-         ["CHG-2", "Emergency changes reviewed after the fact.", "Deviation noted: 2 of 6 emergency changes had no post-implementation review."]]
+         ["CHG-2", "Emergency changes reviewed after the fact.", "Deviation noted: 2 of 6 emergency changes had no post-implementation review."],
+         ["NET-4", "Firewall rule changes are reviewed quarterly.", "Exception noted: the Q2 review was not performed."]]
     t = Table([[P(c) for c in x] for x in r], colWidths=[60, 240, 230]); t.setStyle(TableStyle([('GRID', (0, 0), (-1, -1), 0.5, colors.grey)])); f.append(t)
     doc.build(f)
 report_c('test/fixtures/fabrikam-soc2-type2.pdf'); print('fixture c written')
